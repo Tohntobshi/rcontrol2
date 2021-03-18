@@ -1,0 +1,10 @@
+{
+    "C_Cpp.default.includePath": [
+        "${workspaceFolder}",
+        "${workspaceFolder}/libs/glm/include",
+        "${workspaceFolder}/libs/bmp280/include",
+        "${workspaceFolder}/libs/pigpio/include",
+        "/usr/lib/x86_64-linux-gnu/dbus-1.0/include",
+        "/usr/include/dbus-1.0"
+    ]
+}
