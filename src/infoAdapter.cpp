@@ -16,7 +16,7 @@ void InfoAdapter::sendInfo(
     float yawSpeedErrorChangeRate
 )
 {
-    printf("err %f %f\n", currentPitchError, currentRollError);
+    // printf("err %f %f\n", currentPitchError, currentRollError);
 
     uint32_t size = 25;
     uint32_t tmp1 = htonl(*(uint32_t *)(&currentPitchError));

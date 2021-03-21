@@ -16,6 +16,7 @@ set(
     src/controlsAdapter.cpp
     src/flightController.cpp
     src/infoAdapter.cpp
+    src/utils.cpp
 )
 
 add_executable( rcontrol ${TARGETS} )
