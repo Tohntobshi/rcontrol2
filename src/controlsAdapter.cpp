@@ -79,6 +79,18 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == Controls::SET_INCL_FILTERING_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setIncFilteringCoef(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_ACCELERATION && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setAcceleration(value);
+			delete[] msg.data;
+			continue;
+		}
 		printf("got message\n");
 		delete[] msg.data;
 	}

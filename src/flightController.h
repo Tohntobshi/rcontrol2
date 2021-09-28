@@ -8,7 +8,7 @@
 class FlightController
 {
 private:
-	static FlightController * instance;  
+	static FlightController * instance;
 	FlightController();
 	~FlightController();
 	
@@ -37,6 +37,10 @@ private:
 	glm::vec3 getMagData();
 	glm::vec3 getMagNormalizedData();
 	float getBarData();
+	float getUltrasonicHeight();
+
+	// static int ultrasonicEchoHighTimestamp;
+	// static int ultrasonicEchoLowTimestamp;
 
 
 	// previous iteration values
@@ -80,7 +84,7 @@ private:
 
 	std::mutex commonCommandMtx;
 
-	int baseVal = 0;
+	float acceleration = 0.f;
 
 	// desired values
 	float desiredPitch = 0.f;
@@ -107,6 +111,7 @@ private:
 	float yawSpeedBias = 0.f;
 
 	float accTrust = 0.1f;
+	float inclineFilteringCoef = 0.f;
 	float inclineChangeRateFilteringCoef = 0.f;
 	float yawSpeedFilteringCoef = 0.f;
 	float yawSpeedChangeRateFilteringCoef = 0.f;
@@ -140,10 +145,11 @@ public:
 	void setRollBias(float val);
 	void setYawSpeedBias(float val);
 
-	void setBaseVal(int val);
+	void setAcceleration(float val);
 
 	void setAccTrust(float val);
 	void setIncChangeRateFilteringCoef(float val);
+	void setIncFilteringCoef(float val);
 	void setYawSpFilteringCoef(float val);
 	void setYawSpChangeRateFilteringCoef(float val);
 
