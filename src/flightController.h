@@ -20,6 +20,7 @@ private:
 	int accGyroFD = -1;
 	int magFD = -1;
 	int barFD = -1;
+	int ultrasonicFD = -1;
 	struct bmp280_dev bmp;
 	float aRes = 2.0 / 32768.0;
 	float gRes = 250.0 / 32768.0;
@@ -36,37 +37,60 @@ private:
 	glm::vec3 getGyroData();
 	glm::vec3 getMagData();
 	glm::vec3 getMagNormalizedData();
-	float getBarData();
 	float getUltrasonicHeight();
+	float getBarData();
+	
+	// pitch errors
+	std::mutex pitchErrMtx;
+	float pitchErr = 0.f;
+	void setPitchErr(float);
+	float getPitchErr();
 
-	// static int ultrasonicEchoHighTimestamp;
-	// static int ultrasonicEchoLowTimestamp;
-
-
-	// previous iteration values
-	int64_t prevTimeStamp = 0;
-	float prevPitch = 0.f;
-	float prevRoll = 0.f;
-	float prevYawSpeed = 0.f;
-	float prevPitchErrChangeRate = 0.f;
-	float prevRollErrChangeRate = 0.f;
-	float prevYawSpeedErrChangeRate = 0.f;
+	std::mutex pitchErrDerMtx;
+	float pitchErrDer = 0.f;
+	void setPitchErrDer(float);
+	float getPitchErrDer();
 
 	std::mutex pitchErrIntMtx;
 	float pitchErrInt = 0.f;
 	void setPitchErrInt(float);
 	float getPitchErrInt();
+	// roll errors
+	std::mutex rollErrMtx;
+	float rollErr = 0.f;
+	void setRollErr(float);
+	float getRollErr();
+
+	std::mutex rollErrDerMtx;
+	float rollErrDer = 0.f;
+	void setRollErrDer(float);
+	float getRollErrDer();
 
 	std::mutex rollErrIntMtx;
 	float rollErrInt = 0.f;
 	void setRollErrInt(float);
 	float getRollErrInt();
-
+	// yaw errors
 	std::mutex yawSpeedErrIntMtx;
 	float yawSpeedErrInt = 0.f;
 	void setYawSpeedErrInt(float);
 	float getYawSpeedErrInt();
-	
+	// height errors
+	std::mutex heightErrMtx;
+	float heightErr = 0.f;
+	void setHeightErr(float);
+	float getHeightErr();
+
+	std::mutex heightErrDerMtx;
+	float heightErrDer = 0.f;
+	void setHeightErrDer(float);
+	float getHeightErrDer();
+
+	std::mutex heightErrIntMtx;
+	float heightErrInt = 0.f;
+	void setHeightErrInt(float);
+	float getHeightErrInt();
+	// --------------------------
 	std::mutex shouldStopMtx;
 	bool shouldStop = false;
 	void setShouldStop(bool);
@@ -84,12 +108,12 @@ private:
 
 	std::mutex commonCommandMtx;
 
-	float acceleration = 0.f;
-
 	// desired values
 	float desiredPitch = 0.f;
 	float desiredRoll = 0.f;
 	float desiredYawSpeed = 0.f;
+	float acceleration = 0.f; // desired height
+	float baseAcceleration = 0.f;
 
 	// PID coefficients for pitch
 	float pitchPropCoef = 0.f;
@@ -106,9 +130,10 @@ private:
 	float yawSpDerCoef = 0.f;
 	float yawSpIntCoef = 0.f;
 
-	float pitchBias = 0.f;
-	float rollBias = 0.f;
-	float yawSpeedBias = 0.f;
+	// PID coefficients for height
+	float heightPropCoef = 0.f;
+	float heightDerCoef = 0.f;
+	float heightIntCoef = 0.f;
 
 	float accTrust = 0.1f;
 	float inclineFilteringCoef = 0.f;
@@ -127,7 +152,10 @@ public:
 
 	void scheduleArm();
 	void scheduleCalibrate();
+
 	void setDesiredPitchAndRoll(float, float);
+	void setAcceleration(float val);
+	void setBaseAcceleration(float val);
 
 	void setPitchPropCoef(float val);
 	void setPitchDerCoef(float val);
@@ -141,11 +169,9 @@ public:
 	void setYawSpDerCoef(float val);
 	void setYawSpIntCoef(float val);
 
-	void setPitchBias(float val);
-	void setRollBias(float val);
-	void setYawSpeedBias(float val);
-
-	void setAcceleration(float val);
+	void setHeightPropCoef(float val);
+	void setHeightDerCoef(float val);
+	void setHeightIntCoef(float val);
 
 	void setAccTrust(float val);
 	void setIncChangeRateFilteringCoef(float val);

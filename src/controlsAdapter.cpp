@@ -91,6 +91,31 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == Controls::SET_BASE_ACCELERATION && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setBaseAcceleration(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_HEIGHT_PROP_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setHeightPropCoef(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_HEIGHT_DER_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setHeightDerCoef(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_HEIGHT_INT_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setHeightIntCoef(value);
+			delete[] msg.data;
+			continue;
+		}
+		
 		printf("got message\n");
 		delete[] msg.data;
 	}

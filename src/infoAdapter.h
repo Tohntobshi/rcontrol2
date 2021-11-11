@@ -12,7 +12,11 @@ public:
         float currentRollError,
         float pitchErrorChangeRate,
         float rollErrorChangeRate,
-        float currentYawSpeedError,
-        float yawSpeedErrorChangeRate
+        float currentHeightError,
+        float heightErrorChangeRate,
+        int32_t frontLeft,
+        int32_t frontRight,
+        int32_t backLeft,
+        int32_t backRight
         );
 };
