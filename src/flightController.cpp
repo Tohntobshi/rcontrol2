@@ -69,6 +69,10 @@ FlightController::FlightController()
 	uint8_t intPinCfg = readByte(accGyroFD, INT_PIN_CFG);
 
 	writeByte(accGyroFD, INT_PIN_CFG, intPinCfg | 0b00000010); // set pass though mode for mpu9250 in order to have direct access to magnetometer
+	writeByte(accGyroFD, 26, imuLPFMode); // enable low pass filter for gyro
+	writeByte(accGyroFD, 29, imuLPFMode); // enable low pass filter for accel
+	
+	
 	magFD = i2cOpen(1, AK8963_ADDRESS, 0);
 	if (magFD < 0)
 	{
@@ -114,6 +118,14 @@ FlightController::FlightController()
 	gpioSetMode(MOTOR_FR_PIN, PI_OUTPUT);
 	gpioSetMode(MOTOR_BL_PIN, PI_OUTPUT);
 	gpioSetMode(MOTOR_BR_PIN, PI_OUTPUT);
+	gpioSetPWMfrequency(MOTOR_FL_PIN, 400);
+	gpioSetPWMrange(MOTOR_FL_PIN, 2500);
+	gpioSetPWMfrequency(MOTOR_FR_PIN, 400);
+	gpioSetPWMrange(MOTOR_FR_PIN, 2500);
+	gpioSetPWMfrequency(MOTOR_BL_PIN, 400);
+	gpioSetPWMrange(MOTOR_BL_PIN, 2500);
+	gpioSetPWMfrequency(MOTOR_BR_PIN, 400);
+	gpioSetPWMrange(MOTOR_BR_PIN, 2500);
 	controlAll(0);
 }
 
@@ -152,18 +164,18 @@ void FlightController::calibrate()
 void FlightController::controlAll(uint32_t val)
 {
 	uint32_t value = val == 0 ? 0 : std::min(MAX_VAL, std::max(MIN_VAL, val));
-	gpioServo(MOTOR_FL_PIN, value);
-	gpioServo(MOTOR_FR_PIN, value);
-	gpioServo(MOTOR_BL_PIN, value);
-	gpioServo(MOTOR_BR_PIN, value);
+	gpioPWM(MOTOR_FL_PIN, value);
+	gpioPWM(MOTOR_FR_PIN, value);
+	gpioPWM(MOTOR_BL_PIN, value);
+	gpioPWM(MOTOR_BR_PIN, value);
 }
 
 void FlightController::controlAll(uint32_t fl, uint32_t fr, uint32_t bl, uint32_t br)
 {
-	gpioServo(MOTOR_FL_PIN, std::min(MAX_VAL, std::max(MIN_VAL, fl)));
-	gpioServo(MOTOR_FR_PIN, std::min(MAX_VAL, std::max(MIN_VAL, fr)));
-	gpioServo(MOTOR_BL_PIN, std::min(MAX_VAL, std::max(MIN_VAL, bl)));
-	gpioServo(MOTOR_BR_PIN, std::min(MAX_VAL, std::max(MIN_VAL, br)));
+	gpioPWM(MOTOR_FL_PIN, std::min(MAX_VAL, std::max(MIN_VAL, fl)));
+	gpioPWM(MOTOR_FR_PIN, std::min(MAX_VAL, std::max(MIN_VAL, fr)));
+	gpioPWM(MOTOR_BL_PIN, std::min(MAX_VAL, std::max(MIN_VAL, bl)));
+	gpioPWM(MOTOR_BR_PIN, std::min(MAX_VAL, std::max(MIN_VAL, br)));
 }
 
 uint8_t FlightController::readByte(uint8_t device, uint8_t reg)
@@ -283,6 +295,7 @@ void FlightController::start(InfoAdapter * infoAdapter)
 	setShouldStop(false);
 	std::thread i2cSensorsThread([&]() -> void {
 		std::unique_lock<std::mutex> lck(commonCommandMtx);
+		int currentLPFMode = imuLPFMode;
 		lck.unlock();
 		// previous iteration values
 		int64_t prevTimeStamp = 0;
@@ -303,9 +316,17 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			float inclineFilteringCoef = this->inclineFilteringCoef;
 			float inclineChangeRateFilteringCoef = this->inclineChangeRateFilteringCoef;
 			float yawSpeedFilteringCoef = this->yawSpeedFilteringCoef;
-			float yawSpeedChangeRateFilteringCoef = this->yawSpeedChangeRateFilteringCoef;
+			//  float yawSpeedChangeRateFilteringCoef = this->yawSpeedChangeRateFilteringCoef;
+			float turnOffInclineAngle = this->turnOffInclineAngle;
+			int desiredLPFMode = this->imuLPFMode;
 			lck.unlock();
 
+			if (desiredLPFMode != currentLPFMode)
+			{
+				writeByte(accGyroFD, 26, desiredLPFMode);
+				writeByte(accGyroFD, 29, desiredLPFMode);
+				currentLPFMode == desiredLPFMode;
+			}
 			vec3 acc = normalize(getAccData());
 			vec3 gyro = getGyroData();
 			vec3 mag = getMagNormalizedData();
@@ -323,11 +344,12 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			float rollChangeRate = -gyro.x;
 
 			float currentYawSpeed = gyro.z * (1.f - yawSpeedFilteringCoef) + prevYawSpeed * yawSpeedFilteringCoef;
-
 			float currentPitch = (accPitch * accTrust + (1.f - accTrust) * (prevPitch + pitchChangeRate * secondsElapsed)) * (1.f - inclineFilteringCoef) + prevPitch * inclineFilteringCoef;
 			float currentRoll = (accRoll * accTrust + (1.f - accTrust) * (prevRoll + rollChangeRate * secondsElapsed)) * (1.f - inclineFilteringCoef) + prevRoll * inclineFilteringCoef;
 			float currentHeight = ultrasonicHeight * 0.2 + prevHeight * 0.8; // adjustable filter maybe ?
-
+			// height adjustment according to incline
+			currentHeight = currentHeight * sqrt(1.f / (pow(tan(radians(currentRoll)), 2) + pow(tan(radians(currentPitch)), 2) + 1));
+			
 			float currentPitchError = desiredPitch - currentPitch;
 			float currentRollError = desiredRoll - currentRoll;
 			float currentYawSpeedError = desiredYawSpeed - currentYawSpeed;
@@ -335,6 +357,7 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			setPitchErr(currentPitchError);
 			setRollErr(currentRollError);
 			setHeightErr(currentHeightError);
+			setYawSpeedErr(currentYawSpeedError);
 			float prevPitchError = desiredPitch - prevPitch;
 			float prevRollError = desiredRoll - prevRoll;
 			float prevYawSpeedError = desiredYawSpeed - prevYawSpeed;
@@ -346,11 +369,13 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			setPitchErrDer(pitchErrorChangeRate);
 			setRollErrDer(rollErrorChangeRate);
 			setHeightErrDer(heightErrorChangeRate);
+			setYawSpeedErrDer(yawSpeedErrorChangeRate);
 
 			setPitchErrInt(getPitchErrInt() + currentPitchError * secondsElapsed);
 			setRollErrInt(getRollErrInt() + currentRollError * secondsElapsed);
 			setYawSpeedErrInt(getYawSpeedErrInt() + currentYawSpeedError * secondsElapsed);
 			setHeightErrInt(getHeightErrInt() + currentHeightError * secondsElapsed);
+			setSensorLoopFreqInfo(1.f / secondsElapsed);
 
 			prevPitch = currentPitch;
 			prevRoll = currentRoll;
@@ -360,10 +385,13 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			prevPitchErrChangeRate = pitchErrorChangeRate;
 			prevRollErrChangeRate = rollErrorChangeRate;
 			prevYawSpeedErrChangeRate = yawSpeedErrorChangeRate;
+			if (abs(currentPitch) > turnOffInclineAngle || abs(currentRoll) > turnOffInclineAngle) {
+				setTurnOffTrigger(true);
+			}
 		}
 		
 	});
-
+	int64_t prevTimeStamp = 0;
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
 	lck.unlock();
 	while(!getShouldStop()) {
@@ -394,18 +422,14 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		bool onlyPositiveAdjustMode = this->onlyPositiveAdjustMode;
 		float acceleration = this->acceleration;
 		float baseAcceleration = this->baseAcceleration;
+		bool turnOffTrigger = this->turnOffTrigger;
+		int pidLoopDelay = this->pidLoopDelay;
+		bool sendingInfo = this->sendingInfo;
 		lck.unlock();
 		
-
-		// get this values
-		float currentYawSpeedError = 0.f;
-		float yawSpeedErrorChangeRate = 0.f;
-
-		
-
-		int pitchAdjust = (getPitchErr() * pitchPropCoef + getPitchErrDer() * pitchDerCoef + getPitchErrInt() * pitchIntCoef) * 10;
-		int rollAdjust = (getRollErr() * rollPropCoef + getRollErrDer() * rollDerCoef + getRollErrInt() * rollIntCoef) * 10;
-		int yawAdjust = currentYawSpeedError * yawSpPropCoef + yawSpeedErrorChangeRate * yawSpDerCoef + getYawSpeedErrInt() * yawSpIntCoef;
+		int pitchAdjust = (getPitchErr() * pitchPropCoef + getPitchErrDer() * pitchDerCoef + getPitchErrInt() * pitchIntCoef);
+		int rollAdjust = (getRollErr() * rollPropCoef + getRollErrDer() * rollDerCoef + getRollErrInt() * rollIntCoef);
+		int yawAdjust = getYawSpeedErr() * yawSpPropCoef + getYawSpeedErrDer() * yawSpDerCoef + getYawSpeedErrInt() * yawSpIntCoef;
 		int heightAdjust = (getHeightErr() * heightPropCoef + getHeightErrDer() * heightDerCoef + getHeightErrInt() * heightIntCoef) * 1000;
 
 		int baseVal = MIN_VAL + (MAX_VAL - MIN_VAL) * baseAcceleration;
@@ -415,7 +439,7 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		int frontRight = baseVal + heightAdjust + pitchAdjust + rollAdjust - yawAdjust;
 		int backLeft = baseVal + heightAdjust - pitchAdjust - rollAdjust - yawAdjust;
 		int backRight = baseVal + heightAdjust - pitchAdjust + rollAdjust + yawAdjust;
-		if (acceleration < 0.01f)
+		if (acceleration < 0.01f || turnOffTrigger)
 		{
 			frontLeft = MIN_VAL;
 			frontRight = MIN_VAL;
@@ -432,20 +456,30 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			controlAll(frontLeft, frontRight, backLeft, backRight);
 		}
 		// std::cout << "height error" << getHeightErr() << "\n";
-		infoAdapter->sendInfo(
-			getPitchErr(),
-			getRollErr(),
-			getPitchErrDer(),
-			getRollErrDer(),
-			getHeightErr(),
-			getHeightErrDer(),
-			frontLeft,
-			frontRight,
-			backLeft,
-			backRight
-		);
-
-		std::this_thread::sleep_for(std::chrono::milliseconds(20)); // TODO make adjustable
+		if (sendingInfo) {
+			int64_t currentTimestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
+			float loopFreq = 1000.0 / (double)(currentTimestamp - prevTimeStamp);
+			prevTimeStamp = currentTimestamp;
+			infoAdapter->sendInfo(
+				getPitchErr(),
+				getRollErr(),
+				getPitchErrDer(),
+				getRollErrDer(),
+				getHeightErr(),
+				getHeightErrDer(),
+				frontLeft,
+				frontRight,
+				backLeft,
+				backRight,
+				getYawSpeedErr(),
+				getSensorLoopFreqInfo(),
+				loopFreq
+			);
+		}
+		if (pidLoopDelay)
+		{
+			std::this_thread::sleep_for(std::chrono::milliseconds(pidLoopDelay));
+		}
 	}
 	i2cSensorsThread.join();
 }
@@ -535,6 +569,30 @@ float FlightController::getRollErrInt()
 {
 	std::unique_lock<std::mutex> lck(rollErrIntMtx);
 	return rollErrInt;
+}
+
+void FlightController::setYawSpeedErr(float val)
+{
+	std::unique_lock<std::mutex> lck(yawSpeedErrMtx);
+	yawSpeedErr = val;
+}
+
+float FlightController::getYawSpeedErr()
+{
+	std::unique_lock<std::mutex> lck(yawSpeedErrMtx);
+	return yawSpeedErr;
+}
+
+void FlightController::setYawSpeedErrDer(float val)
+{
+	std::unique_lock<std::mutex> lck(yawSpeedErrDerMtx);
+	yawSpeedErrDer = val;
+}
+
+float FlightController::getYawSpeedErrDer()
+{
+	std::unique_lock<std::mutex> lck(yawSpeedErrDerMtx);
+	return yawSpeedErrDer;
 }
 
 void FlightController::setYawSpeedErrInt(float val)
@@ -753,4 +811,52 @@ void FlightController::setOnlyPositiveAdjustMode(bool value)
 {
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
 	onlyPositiveAdjustMode = value;
+}
+
+void FlightController::setTurnOffInclineAngle(float value)
+{
+	std::unique_lock<std::mutex> lck(commonCommandMtx);
+	turnOffInclineAngle = value;
+}
+
+void FlightController::setTurnOffTrigger(bool value)
+{
+	std::unique_lock<std::mutex> lck(commonCommandMtx);
+	turnOffTrigger = value;
+}
+
+void FlightController::resetTurnOffTrigger()
+{
+	setTurnOffTrigger(false);
+}
+
+void FlightController::setSensorLoopFreqInfo(float val)
+{
+	std::unique_lock<std::mutex> lck(sensorLoopFreqInfoMtx);
+	sensorLoopFreqInfo = val;
+}
+
+float FlightController::getSensorLoopFreqInfo()
+{
+	std::unique_lock<std::mutex> lck(sensorLoopFreqInfoMtx);
+	return sensorLoopFreqInfo;
+}
+
+void FlightController::setPIDLoopDelay(int value)
+{
+	std::unique_lock<std::mutex> lck(commonCommandMtx);
+	pidLoopDelay = value;
+}
+
+void FlightController::setImuLPFMode(int value)
+{
+	std::unique_lock<std::mutex> lck(commonCommandMtx);
+	int mode = min(6, max(1, value));
+	imuLPFMode = value;
+}
+
+void FlightController::setSendingInfo(bool value)
+{
+	std::unique_lock<std::mutex> lck(commonCommandMtx);
+	sendingInfo = value;
 }

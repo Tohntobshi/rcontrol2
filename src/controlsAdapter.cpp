@@ -2,6 +2,7 @@
 #include "controlsAdapter.h"
 #include "messageTypes.h"
 #include "utils.h"
+#include "iostream"
 
 ControlsAdapter::ControlsAdapter(Connection * conn, FlightController * flightContr)
 : connection(conn), flightController(flightContr) {}
@@ -115,7 +116,64 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
-		
+		if (msg.data[1] == Controls::SET_TURN_OFF_INCLINE_ANGLE && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setTurnOffInclineAngle(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::RESET_TURN_OFF_TRIGGER && msg.size == 2) {
+			flightController->resetTurnOffTrigger();
+			delete[] msg.data;
+			continue;
+		}
+
+		if (msg.data[1] == Controls::SET_YAW_SP_PROP_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setYawSpPropCoef(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_YAW_SP_DER_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setYawSpDerCoef(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_YAW_SP_INT_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setYawSpIntCoef(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_YAW_SP_FILTERING_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setYawSpFilteringCoef(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_PID_LOOP_DELAY && msg.size == 6) {
+			int value = Utils::getIntFromNet(msg.data + 2);
+			flightController->setPIDLoopDelay(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_IMU_LPF_MODE && msg.size == 6) {
+			int value = Utils::getIntFromNet(msg.data + 2);
+			flightController->setImuLPFMode(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::START_SENDING_INFO && msg.size == 2) {
+			flightController->setSendingInfo(true);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::STOP_SENDING_INFO && msg.size == 2) {
+			flightController->setSendingInfo(false);
+			delete[] msg.data;
+			continue;
+		}
 		printf("got message\n");
 		delete[] msg.data;
 	}

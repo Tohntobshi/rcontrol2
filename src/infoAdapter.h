@@ -17,6 +17,9 @@ public:
         int32_t frontLeft,
         int32_t frontRight,
         int32_t backLeft,
-        int32_t backRight
+        int32_t backRight,
+        float yawSpError,
+        float sensorLoopFreq,
+        float pidLoopFreq
         );
 };

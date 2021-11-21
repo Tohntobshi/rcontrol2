@@ -71,6 +71,16 @@ private:
 	void setRollErrInt(float);
 	float getRollErrInt();
 	// yaw errors
+	std::mutex yawSpeedErrMtx;
+	float yawSpeedErr = 0.f;
+	void setYawSpeedErr(float);
+	float getYawSpeedErr();
+
+	std::mutex yawSpeedErrDerMtx;
+	float yawSpeedErrDer = 0.f;
+	void setYawSpeedErrDer(float);
+	float getYawSpeedErrDer();
+
 	std::mutex yawSpeedErrIntMtx;
 	float yawSpeedErrInt = 0.f;
 	void setYawSpeedErrInt(float);
@@ -106,6 +116,11 @@ private:
 	void setNeedCalibrate(bool);
 	bool getNeedCalibrate();
 
+	std::mutex sensorLoopFreqInfoMtx;
+	float sensorLoopFreqInfo = 0.f;
+	void setSensorLoopFreqInfo(float);
+	float getSensorLoopFreqInfo();
+
 	std::mutex commonCommandMtx;
 
 	// desired values
@@ -114,6 +129,8 @@ private:
 	float desiredYawSpeed = 0.f;
 	float acceleration = 0.f; // desired height
 	float baseAcceleration = 0.f;
+
+	int imuLPFMode = 3;
 
 	// PID coefficients for pitch
 	float pitchPropCoef = 0.f;
@@ -142,7 +159,12 @@ private:
 	float yawSpeedChangeRateFilteringCoef = 0.f;
 
 	bool onlyPositiveAdjustMode = true;
+	bool turnOffTrigger = false;
+	float turnOffInclineAngle = 30.f;
+	int pidLoopDelay = 20;
+	bool sendingInfo = false;
 
+	void setTurnOffTrigger(bool val);
 public:
 	static FlightController * Init();
 	static void Destroy();
@@ -180,4 +202,11 @@ public:
 	void setYawSpChangeRateFilteringCoef(float val);
 
 	void setOnlyPositiveAdjustMode(bool val);
+
+	void setTurnOffInclineAngle(float val);
+	
+	void resetTurnOffTrigger();
+	void setPIDLoopDelay(int val);
+	void setImuLPFMode(int val); // from 1 to 6
+	void setSendingInfo(bool val);
 };
