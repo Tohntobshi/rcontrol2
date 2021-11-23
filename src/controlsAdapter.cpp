@@ -152,12 +152,6 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
-		if (msg.data[1] == Controls::SET_PID_LOOP_DELAY && msg.size == 6) {
-			int value = Utils::getIntFromNet(msg.data + 2);
-			flightController->setPIDLoopDelay(value);
-			delete[] msg.data;
-			continue;
-		}
 		if (msg.data[1] == Controls::SET_IMU_LPF_MODE && msg.size == 6) {
 			int value = Utils::getIntFromNet(msg.data + 2);
 			flightController->setImuLPFMode(value);

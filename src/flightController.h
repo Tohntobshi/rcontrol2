@@ -39,68 +39,7 @@ private:
 	glm::vec3 getMagNormalizedData();
 	float getUltrasonicHeight();
 	float getBarData();
-	
-	// pitch errors
-	std::mutex pitchErrMtx;
-	float pitchErr = 0.f;
-	void setPitchErr(float);
-	float getPitchErr();
 
-	std::mutex pitchErrDerMtx;
-	float pitchErrDer = 0.f;
-	void setPitchErrDer(float);
-	float getPitchErrDer();
-
-	std::mutex pitchErrIntMtx;
-	float pitchErrInt = 0.f;
-	void setPitchErrInt(float);
-	float getPitchErrInt();
-	// roll errors
-	std::mutex rollErrMtx;
-	float rollErr = 0.f;
-	void setRollErr(float);
-	float getRollErr();
-
-	std::mutex rollErrDerMtx;
-	float rollErrDer = 0.f;
-	void setRollErrDer(float);
-	float getRollErrDer();
-
-	std::mutex rollErrIntMtx;
-	float rollErrInt = 0.f;
-	void setRollErrInt(float);
-	float getRollErrInt();
-	// yaw errors
-	std::mutex yawSpeedErrMtx;
-	float yawSpeedErr = 0.f;
-	void setYawSpeedErr(float);
-	float getYawSpeedErr();
-
-	std::mutex yawSpeedErrDerMtx;
-	float yawSpeedErrDer = 0.f;
-	void setYawSpeedErrDer(float);
-	float getYawSpeedErrDer();
-
-	std::mutex yawSpeedErrIntMtx;
-	float yawSpeedErrInt = 0.f;
-	void setYawSpeedErrInt(float);
-	float getYawSpeedErrInt();
-	// height errors
-	std::mutex heightErrMtx;
-	float heightErr = 0.f;
-	void setHeightErr(float);
-	float getHeightErr();
-
-	std::mutex heightErrDerMtx;
-	float heightErrDer = 0.f;
-	void setHeightErrDer(float);
-	float getHeightErrDer();
-
-	std::mutex heightErrIntMtx;
-	float heightErrInt = 0.f;
-	void setHeightErrInt(float);
-	float getHeightErrInt();
-	// --------------------------
 	std::mutex shouldStopMtx;
 	bool shouldStop = false;
 	void setShouldStop(bool);
@@ -115,11 +54,6 @@ private:
 	bool needCalibrate = false;
 	void setNeedCalibrate(bool);
 	bool getNeedCalibrate();
-
-	std::mutex sensorLoopFreqInfoMtx;
-	float sensorLoopFreqInfo = 0.f;
-	void setSensorLoopFreqInfo(float);
-	float getSensorLoopFreqInfo();
 
 	std::mutex commonCommandMtx;
 
@@ -158,10 +92,8 @@ private:
 	float yawSpeedFilteringCoef = 0.f;
 	float yawSpeedChangeRateFilteringCoef = 0.f;
 
-	bool onlyPositiveAdjustMode = true;
 	bool turnOffTrigger = false;
 	float turnOffInclineAngle = 30.f;
-	int pidLoopDelay = 20;
 	bool sendingInfo = false;
 
 	void setTurnOffTrigger(bool val);
@@ -201,12 +133,9 @@ public:
 	void setYawSpFilteringCoef(float val);
 	void setYawSpChangeRateFilteringCoef(float val);
 
-	void setOnlyPositiveAdjustMode(bool val);
-
 	void setTurnOffInclineAngle(float val);
 	
 	void resetTurnOffTrigger();
-	void setPIDLoopDelay(int val);
 	void setImuLPFMode(int val); // from 1 to 6
 	void setSendingInfo(bool val);
 };

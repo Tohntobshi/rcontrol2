@@ -19,13 +19,16 @@ void InfoAdapter::sendInfo(
     int32_t backLeft,
     int32_t backRight,
     float yawSpError,
-    float sensorLoopFreq,
-    float pidLoopFreq
+    float pidLoopFreq,
+    float pitchErrInt,
+    float rollErrInt,
+    float yawSpErrInt,
+    float heightErrInt
 )
 {
     // printf("err %f %f\n", currentPitchError, currentRollError);
 
-    uint32_t size = 25 + 16 + 4 + 8;
+    uint32_t size = 25 + 16 + 4 + 4 + 16;
     uint32_t tmp1 = htonl(*(uint32_t *)(&currentPitchError));
     uint32_t tmp2 = htonl(*(uint32_t *)(&currentRollError));
     uint32_t tmp3 = htonl(*(uint32_t *)(&pitchErrorChangeRate));
@@ -40,8 +43,13 @@ void InfoAdapter::sendInfo(
 
     uint32_t tmp11 = htonl(*(uint32_t *)(&yawSpError));
 
-    uint32_t tmp12 = htonl(*(uint32_t *)(&sensorLoopFreq));
-    uint32_t tmp13 = htonl(*(uint32_t *)(&pidLoopFreq));
+    uint32_t tmp12 = htonl(*(uint32_t *)(&pidLoopFreq));
+
+    uint32_t tmp13 = htonl(*(uint32_t *)(&pitchErrInt));
+    uint32_t tmp14 = htonl(*(uint32_t *)(&rollErrInt));
+    uint32_t tmp15 = htonl(*(uint32_t *)(&yawSpErrInt));
+    uint32_t tmp16 = htonl(*(uint32_t *)(&heightErrInt));
+
     uint8_t * data = new uint8_t[size];
     data[0] = MessageTypes::INFO;
     memcpy(data + 1, &tmp1, 4);
@@ -57,6 +65,10 @@ void InfoAdapter::sendInfo(
     memcpy(data + 37, &tmp10, 4);
     memcpy(data + 41, &tmp11, 4);
     memcpy(data + 45, &tmp12, 4);
+
     memcpy(data + 49, &tmp13, 4);
+    memcpy(data + 53, &tmp14, 4);
+    memcpy(data + 57, &tmp15, 4);
+    memcpy(data + 61, &tmp16, 4);
     connection->enqueueToSend({ .data = data, .size = size }, true);
 }

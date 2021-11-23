@@ -19,7 +19,10 @@ public:
         int32_t backLeft,
         int32_t backRight,
         float yawSpError,
-        float sensorLoopFreq,
-        float pidLoopFreq
+        float pidLoopFreq,
+        float pitchErrInt,
+        float rollErrInt,
+        float yawSpErrInt,
+        float heightErrInt
         );
 };
