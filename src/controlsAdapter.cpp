@@ -168,6 +168,21 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == Controls::CALIBRATE_ESC && msg.size == 2) {
+			flightController->scheduleCalibrate();
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::CALIBRATE_GYRO && msg.size == 2) {
+			flightController->scheduleCalibrateGyro();
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::CALIBRATE_ACC && msg.size == 2) {
+			flightController->scheduleCalibrateAccel();
+			delete[] msg.data;
+			continue;
+		}
 		printf("got message\n");
 		delete[] msg.data;
 	}

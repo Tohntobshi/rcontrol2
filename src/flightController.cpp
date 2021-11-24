@@ -161,6 +161,36 @@ void FlightController::calibrate()
 	controlAll(0);
 }
 
+std::array<float, 2> FlightController::calibrateAccel()
+{
+	std::array<float, 2> result = { 0.f, 0.f };
+	for (int i = 0; i < 5000; i++) {
+		vec3 acc = normalize(getAccData());
+		float accPitch = degrees(atan2(acc.x, acc.z));
+		result[0] += accPitch;
+		float accRoll = -degrees(atan2(acc.y, acc.z));
+		result[1] += accRoll;
+	}
+	result[0] /= 5000;
+	result[1] /= 5000;
+	return result;
+	
+}
+std::array<float, 3> FlightController::calibrateGyro()
+{
+	std::array<float, 3> result = { 0.f, 0.f, 0.f };
+	for (int i = 0; i < 5000; i++) {
+		vec3 gyro = getGyroData();
+		result[0] += gyro.y;
+		result[1] += gyro.x;
+		result[2] += gyro.z;
+	}
+	result[0] /= 5000;
+	result[1] /= 5000;
+	result[2] /= 5000;
+	return result;
+}
+
 void FlightController::controlAll(uint32_t val)
 {
 	uint32_t value = val == 0 ? 0 : std::min(MAX_VAL, std::max(MIN_VAL, val));
@@ -308,6 +338,11 @@ void FlightController::start(InfoAdapter * infoAdapter)
 	int sendInfoCounter = 0;
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
 	int currentLPFMode = imuLPFMode;
+	float pitchAccelCalibration = 0.f;
+	float rollAccelCalibration = 0.f;
+	float pitchGyroCalibration = 0.f;
+	float rollGyroCalibration = 0.f;
+	float yawGyroCalibration = 0.f;
 	lck.unlock();
 	while(!getShouldStop()) {
 		if (getNeedArm()) {
@@ -317,7 +352,23 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		}
 		if (getNeedCalibrate()) {
 			calibrate();
+			arm();
 			setNeedCalibrate(false);
+			continue;
+		}
+		if (getNeedCalibrateGyro()) {
+			auto result = calibrateGyro();
+			pitchGyroCalibration = result[0];
+			rollGyroCalibration = result[1];
+			yawGyroCalibration = result[2];
+			setNeedCalibrateGyro(false);
+			continue;
+		}
+		if (getNeedCalibrateAccel()) {
+			auto result = calibrateAccel();
+			pitchAccelCalibration = result[0];
+			rollAccelCalibration = result[1];
+			setNeedCalibrateAccel(false);
 			continue;
 		}
 		// copy adjustable from outside values
@@ -367,16 +418,16 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		int64_t currentTimestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 		float secondsElapsed = (double)(currentTimestamp - prevTimeStamp) / 1000.0;
 
-		float accPitch = degrees(atan2(acc.x, acc.z));
-		float accRoll = -degrees(atan2(acc.y, acc.z));
+		float accPitch = degrees(atan2(acc.x, acc.z)) - pitchAccelCalibration;
+		float accRoll = -degrees(atan2(acc.y, acc.z)) - rollAccelCalibration;
 		float magYaw = degrees(atan2(mag.y, mag.x));
 
-		float pitchChangeRate = -gyro.y;
-		float rollChangeRate = -gyro.x;
+		float pitchChangeRate = gyro.y - pitchGyroCalibration;
+		float rollChangeRate = gyro.x - rollGyroCalibration;
 
-		float currentYawSpeed = gyro.z * (1.f - yawSpeedFilteringCoef) + prevYawSpeed * yawSpeedFilteringCoef;
-		float currentPitch = (accPitch * accTrust + (1.f - accTrust) * (prevPitch + pitchChangeRate * secondsElapsed)) * (1.f - inclineFilteringCoef) + prevPitch * inclineFilteringCoef;
-		float currentRoll = (accRoll * accTrust + (1.f - accTrust) * (prevRoll + rollChangeRate * secondsElapsed)) * (1.f - inclineFilteringCoef) + prevRoll * inclineFilteringCoef;
+		float currentYawSpeed = (gyro.z - yawGyroCalibration) * (1.f - yawSpeedFilteringCoef) + prevYawSpeed * yawSpeedFilteringCoef;
+		float currentPitch = (accPitch * accTrust + (1.f - accTrust) * (prevPitch - pitchChangeRate * secondsElapsed)) * (1.f - inclineFilteringCoef) + prevPitch * inclineFilteringCoef;
+		float currentRoll = (accRoll * accTrust + (1.f - accTrust) * (prevRoll - rollChangeRate * secondsElapsed)) * (1.f - inclineFilteringCoef) + prevRoll * inclineFilteringCoef;
 		float currentHeight = ultrasonicHeight * 0.2 + prevHeight * 0.8; // adjustable filter maybe ?
 		// height adjustment according to incline
 		currentHeight = currentHeight * sqrt(1.f / (pow(tan(radians(currentRoll)), 2) + pow(tan(radians(currentPitch)), 2) + 1));
@@ -390,8 +441,8 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		float prevRollError = desiredRoll - prevRoll;
 		float prevYawSpeedError = desiredYawSpeed - prevYawSpeed;
 
-		float pitchErrorChangeRate = -pitchChangeRate * (1.f - inclineChangeRateFilteringCoef) + prevPitchErrChangeRate * inclineChangeRateFilteringCoef;
-		float rollErrorChangeRate = -rollChangeRate * (1.f - inclineChangeRateFilteringCoef) + prevRollErrChangeRate * inclineChangeRateFilteringCoef;
+		float pitchErrorChangeRate = pitchChangeRate * (1.f - inclineChangeRateFilteringCoef) + prevPitchErrChangeRate * inclineChangeRateFilteringCoef;
+		float rollErrorChangeRate = rollChangeRate * (1.f - inclineChangeRateFilteringCoef) + prevRollErrChangeRate * inclineChangeRateFilteringCoef;
 		float yawSpeedErrorChangeRate = ((currentYawSpeedError - prevYawSpeedError) / secondsElapsed) * (1.f - yawSpeedChangeRateFilteringCoef) + prevYawSpeedErrChangeRate * yawSpeedChangeRateFilteringCoef;
 		float heightErrorChangeRate = (currentHeightError - (desiredHeight - prevHeight)) / secondsElapsed;
 
@@ -482,6 +533,16 @@ void FlightController::scheduleCalibrate()
 	setNeedCalibrate(true);
 }
 
+void FlightController::scheduleCalibrateGyro()
+{
+	setNeedCalibrateGyro(true);
+}
+
+void FlightController::scheduleCalibrateAccel()
+{
+	setNeedCalibrateAccel(true);
+}
+
 void FlightController::setShouldStop(bool val)
 {
 	std::unique_lock<std::mutex> lck(shouldStopMtx);
@@ -516,6 +577,30 @@ bool FlightController::getNeedCalibrate()
 {
 	std::unique_lock<std::mutex> lck(needCalibrateMtx);
 	return needCalibrate;
+}
+
+void FlightController::setNeedCalibrateGyro(bool val)
+{
+	std::unique_lock<std::mutex> lck(needCalibrateGyroMtx);
+	needCalibrateGyro = val;
+}
+
+bool FlightController::getNeedCalibrateGyro()
+{
+	std::unique_lock<std::mutex> lck(needCalibrateGyroMtx);
+	return needCalibrateGyro;
+}
+
+void FlightController::setNeedCalibrateAccel(bool val)
+{
+	std::unique_lock<std::mutex> lck(needCalibrateAccelMtx);
+	needCalibrateAccel = val;
+}
+
+bool FlightController::getNeedCalibrateAccel()
+{
+	std::unique_lock<std::mutex> lck(needCalibrateAccelMtx);
+	return needCalibrateAccel;
 }
 
 void FlightController::setDesiredPitchAndRoll(float pitch, float roll)

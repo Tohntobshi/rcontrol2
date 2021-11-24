@@ -4,6 +4,7 @@
 #include "bmp280.h"
 #include <mutex>
 #include "infoAdapter.h"
+#include <array>
 
 class FlightController
 {
@@ -16,6 +17,8 @@ private:
 	void controlAll(uint32_t fl, uint32_t fr, uint32_t bl, uint32_t br);
 	void calibrate();
 	void arm();
+	std::array<float, 2> calibrateAccel();
+	std::array<float, 3> calibrateGyro();
 
 	int accGyroFD = -1;
 	int magFD = -1;
@@ -54,6 +57,16 @@ private:
 	bool needCalibrate = false;
 	void setNeedCalibrate(bool);
 	bool getNeedCalibrate();
+
+	std::mutex needCalibrateGyroMtx;
+	bool needCalibrateGyro = false;
+	void setNeedCalibrateGyro(bool);
+	bool getNeedCalibrateGyro();
+
+	std::mutex needCalibrateAccelMtx;
+	bool needCalibrateAccel = false;
+	void setNeedCalibrateAccel(bool);
+	bool getNeedCalibrateAccel();
 
 	std::mutex commonCommandMtx;
 
@@ -106,6 +119,8 @@ public:
 
 	void scheduleArm();
 	void scheduleCalibrate();
+	void scheduleCalibrateGyro();
+	void scheduleCalibrateAccel();
 
 	void setDesiredPitchAndRoll(float, float);
 	void setAcceleration(float val);
