@@ -183,6 +183,20 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+
+		if (msg.data[1] == Controls::SET_PITCH_ADJUST && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPitchAdjust(value);
+			delete[] msg.data;
+			continue;
+		}
+
+		if (msg.data[1] == Controls::SET_ROLL_ADJUST && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setRollAdjust(value);
+			delete[] msg.data;
+			continue;
+		}
 		printf("got message\n");
 		delete[] msg.data;
 	}

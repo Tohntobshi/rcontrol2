@@ -18,7 +18,7 @@ private:
 	void calibrate();
 	void arm();
 	std::array<float, 2> calibrateAccel();
-	std::array<float, 3> calibrateGyro();
+	glm::vec3 calibrateGyro();
 
 	int accGyroFD = -1;
 	int magFD = -1;
@@ -40,8 +40,28 @@ private:
 	glm::vec3 getGyroData();
 	glm::vec3 getMagData();
 	glm::vec3 getMagNormalizedData();
-	float getUltrasonicHeight();
+	float getUltrasonicHeightFromSensor();
 	float getBarData();
+
+	std::mutex ultrasonicHeightValsMtx;
+	float ultrasonicHeightVal = 0.f;
+	float ultrasonicHeightDerVal = 0.f;
+	void setUltrasonicHeightVals(float, float);
+	std::array<float, 2> getUltrasonicHeightVals();
+
+	std::mutex motorValsMtx;
+	int motorValFL = 0;
+	int motorValFR = 0;
+	int motorValBL = 0;
+	int motorValBR = 0;
+	void setMotorVals(int, int, int, int);
+	std::array<int, 4> getMotorVals();
+
+	std::mutex currentInclineValsMtx;
+	float currentPitch = 0;
+	float currentRoll = 0;
+	void setCurrentInclineVals(float, float);
+	std::array<float, 2> getCurrentInclineVals();
 
 	std::mutex shouldStopMtx;
 	bool shouldStop = false;
@@ -109,6 +129,9 @@ private:
 	float turnOffInclineAngle = 30.f;
 	bool sendingInfo = false;
 
+	float pitchAdjust = 0.f;
+	float rollAdjust = 0.f;
+
 	void setTurnOffTrigger(bool val);
 public:
 	static FlightController * Init();
@@ -153,4 +176,7 @@ public:
 	void resetTurnOffTrigger();
 	void setImuLPFMode(int val); // from 1 to 6
 	void setSendingInfo(bool val);
+
+	void setPitchAdjust(float);
+	void setRollAdjust(float);
 };

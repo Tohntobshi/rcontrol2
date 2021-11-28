@@ -14,4 +14,14 @@ sudo systemctl restart bluetooth
 ```
 I2C interface should be enabled (e.g. via ```raspi-config``` tool)
 
+and set to 400khz data transfer rate by updating line in ```/boot/config.txt```
+
+from
+
+```dtparam=i2c_arm=on```
+
+to
+
+```dtparam=i2c_arm=on,i2c_arm_baudrate=400000```
+
 The app itself also should be run as root
