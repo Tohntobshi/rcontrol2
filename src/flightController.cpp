@@ -5,6 +5,9 @@
 #include <chrono>
 #include <math.h>
 #include <algorithm>
+#include "utils.h"
+#include "glm/gtx/rotate_vector.hpp"
+#include <fstream>
 
 using namespace glm;
 
@@ -72,22 +75,27 @@ FlightController::FlightController()
 	writeByte(accGyroFD, 26, imuLPFMode); // enable low pass filter for gyro
 	writeByte(accGyroFD, 29, imuLPFMode); // enable low pass filter for accel
 	
+	restorePrevGyroCalibration();
 	
 	magFD = i2cOpen(1, AK8963_ADDRESS, 0);
 	if (magFD < 0)
 	{
 		std::cout << "cant open mag sensor\n";
 	}
+	writeByte(magFD, AK8963_CNTL, 0b00000000); // set power down mode for magnetometer
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	writeByte(magFD, AK8963_CNTL, 0b00001111); // set rom mode for magnetometer
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	uint8_t rawMagAdjVals[3];
 	readBytes(magFD, AK8963_ASAX, rawMagAdjVals, 3);
-	magAdjustment.x = (float)(rawMagAdjVals[0] - 128) / 128.f + 1.f;
-	magAdjustment.y = (float)(rawMagAdjVals[1] - 128) / 128.f + 1.f;
-	magAdjustment.z = (float)(rawMagAdjVals[2] - 128) / 128.f + 1.f;
+	magAdjustment.x = ((float)(rawMagAdjVals[0] - 128) * 0.5f) / 128.f + 1.f;
+	magAdjustment.y = ((float)(rawMagAdjVals[1] - 128) * 0.5f) / 128.f + 1.f;
+	magAdjustment.z = ((float)(rawMagAdjVals[2] - 128) * 0.5f) / 128.f + 1.f;
+	writeByte(magFD, AK8963_CNTL, 0b00000000); // set power down mode for magnetometer
+	std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	writeByte(magFD, AK8963_CNTL, 0b00010110); // set 16bit continious measurement mode for magnetometer
-	vec3 magVals = getMagData();
-	magMinVals = magVals;
-	magMaxVals = magVals;
+
+	restorePrevMagCalibration();
 
 	barFD = i2cOpen(1, BMP280_I2C_ADDR_PRIM, 0);
 	if (barFD < 0)
@@ -176,7 +184,7 @@ std::array<float, 2> FlightController::calibrateAccel()
 	return result;
 	
 }
-glm::vec3 FlightController::calibrateGyro()
+void FlightController::calibrateGyro()
 {
 	vec3 values;
 	for (int i = 0; i < 10000; i++) {
@@ -184,7 +192,28 @@ glm::vec3 FlightController::calibrateGyro()
 		values += gyro;
 	}
 	values /= 10000;
-	return values;
+	gyroCalibration = values;
+	std::ofstream file;
+	file.open("/home/pi/gyrocalibration", std::ofstream::out | std::ofstream::trunc);
+	file << values.x << ","<< values.y << ","<< values.z << "\n";
+	file.close();
+}
+
+void FlightController::restorePrevGyroCalibration()
+{
+	std::ifstream file;
+	file.open("/home/pi/gyrocalibration");
+	if (!file.is_open()) return;
+	std::string line;
+	std::getline(file, line);
+	file.close();
+	float x;
+	float y;
+	float z;
+	sscanf(line.c_str(), "%f,%f,%f", &x, &y, &z);
+	gyroCalibration.x = x;
+	gyroCalibration.y = y;
+	gyroCalibration.z = z;
 }
 
 void FlightController::controlAll(uint32_t val)
@@ -279,46 +308,90 @@ vec3 FlightController::getGyroData()
 	return result;
 }
 
+vec3 FlightController::getGyroCalibratedData()
+{
+	return getGyroData() - gyroCalibration;
+}
+
+
 vec3 FlightController::getMagData()
 {
-	uint8_t rawData[7];
-	readBytes(magFD, AK8963_XOUT_L, rawData, 7);
-	if ((rawData[6] & 0x08))
+	while (true)
 	{
-		// data corrupted, do something
+		uint8_t rawData[7];
+		readBytes(magFD, AK8963_XOUT_L, rawData, 7);
+		if ((rawData[6] & 0x08))
+		{
+			// data corrupted, try again
+			continue;
+		}
+		int16_t rawX = ((int16_t)rawData[1] << 8) | rawData[0];
+		int16_t rawY = ((int16_t)rawData[3] << 8) | rawData[2];
+		int16_t rawZ = ((int16_t)rawData[5] << 8) | rawData[4];
+		vec3 result;
+		result.x = (float)rawX * magAdjustment.x;
+		result.y = (float)rawY * magAdjustment.y;
+		result.z = (float)rawZ * magAdjustment.z;
+		return result;
 	}
-	int16_t rawX = ((int16_t)rawData[1] << 8) | rawData[0];
-	int16_t rawY = ((int16_t)rawData[3] << 8) | rawData[2];
-	int16_t rawZ = ((int16_t)rawData[5] << 8) | rawData[4];
-	vec3 result;
-	result.x = (float)rawX * mRes * magAdjustment.x;
-	result.y = (float)rawY * mRes * magAdjustment.y;
-	result.z = (float)rawZ * mRes * magAdjustment.z;
-	return result;
+}
+
+void FlightController::calibrateMag()
+{
+	vec3 result = getMagData();
+	vec3 magMinVals = result;
+	vec3 magMaxVals = result;
+	for (int i = 0; i < 20000; i++) {
+		vec3 result = getMagData();
+		if (result.x < magMinVals.x)
+			magMinVals.x = result.x;
+		if (result.x > magMaxVals.x)
+			magMaxVals.x = result.x;
+		if (result.y < magMinVals.y)
+			magMinVals.y = result.y;
+		if (result.y > magMaxVals.y)
+			magMaxVals.y = result.y;
+		if (result.z < magMinVals.z)
+			magMinVals.z = result.z;
+		if (result.z > magMaxVals.z)
+			magMaxVals.z = result.z;
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+	magRange = (magMaxVals - magMinVals) / 2.f;
+	magMidVals = magMinVals + magRange;
+	std::ofstream file;
+	file.open("/home/pi/magcalibration", std::ofstream::out | std::ofstream::trunc);
+	file << magRange.x << ","<< magRange.y << ","<< magRange.z << ","<< magMidVals.x << ","<< magMidVals.y << ","<< magMidVals.z << "\n";
+	file.close();
+}
+
+void FlightController::restorePrevMagCalibration()
+{
+	std::ifstream file;
+	file.open("/home/pi/magcalibration");
+	if (!file.is_open()) return;
+	std::string line;
+	std::getline(file, line);
+	file.close();
+	float mRangeX;
+	float mRangeY;
+	float mRangeZ;
+	float midX;
+	float midY;
+	float midZ;
+	sscanf(line.c_str(), "%f,%f,%f,%f,%f,%f", &mRangeX, &mRangeY, &mRangeZ, &midX, &midY, &midZ);
+	magRange.x = mRangeX;
+	magMidVals.x = midX;
+	magRange.y = mRangeY;
+	magMidVals.y = midY;
+	magRange.z = mRangeZ;
+	magMidVals.z = midZ;
 }
 
 vec3 FlightController::getMagNormalizedData()
 {
 	vec3 result = getMagData();
-	if (result.x < magMinVals.x)
-		magMinVals.x = result.x;
-	if (result.x > magMaxVals.x)
-		magMaxVals.x = result.x;
-	if (result.y < magMinVals.y)
-		magMinVals.y = result.y;
-	if (result.y > magMaxVals.y)
-		magMaxVals.y = result.y;
-	if (result.z < magMinVals.z)
-		magMinVals.z = result.z;
-	if (result.z > magMaxVals.z)
-		magMaxVals.z = result.z;
-	magMidVals.x = (magMaxVals.x + magMinVals.x) / 2.f;
-	magMidVals.y = (magMaxVals.y + magMinVals.y) / 2.f;
-	magMidVals.z = (magMaxVals.z + magMinVals.z) / 2.f;
-	float xRange = abs(magMaxVals.x - magMinVals.x) / 2.f;
-	float yRange = abs(magMaxVals.y - magMinVals.y) / 2.f;
-	float zRange = abs(magMaxVals.z - magMinVals.z) / 2.f;
-	vec3 noralizedSeparately({(result.x - magMidVals.x) / xRange, (result.y - magMidVals.y) / yRange, (result.z - magMidVals.z) / zRange});
+	vec3 noralizedSeparately({(result.x - magMidVals.x) / magRange.x, (result.y - magMidVals.y) / magRange.y, (result.z - magMidVals.z) / magRange.z});
 	return normalize(noralizedSeparately);
 }
 
@@ -384,26 +457,24 @@ void FlightController::start(InfoAdapter * infoAdapter)
 	int64_t infoSentTimeStamp = 0;
 	float prevPitch = 0.f;
 	float prevRoll = 0.f;
-	float prevYawSpeed = 0.f;
+	float prevYaw = 0.f;
 	float prevHeight = 0.f;
-	float prevPitchErrChangeRate = 0.f;
-	float prevRollErrChangeRate = 0.f;
-	float prevYawSpeedErrChangeRate = 0.f;
 	float pitchErrInt = 0.f;
 	float rollErrInt = 0.f;
-	float yawSpeedErrInt = 0.f;
+	float yawErrInt = 0.f;
 	float heightErrInt = 0.f;
+
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
 	int currentLPFMode = imuLPFMode;
 	float pitchAccelCalibration = 0.f;
 	float rollAccelCalibration = 0.f;
-	vec3 gyroCalibration;
 	lck.unlock();
 	while(!getShouldStop()) {
 		
 		if (getNeedCalibrateGyro()) {
-			gyroCalibration = calibrateGyro();
+			calibrateGyro();
 			setNeedCalibrateGyro(false);
+			prevYaw = 0.f; // temp solution
 			continue;
 		}
 		if (getNeedCalibrateAccel()) {
@@ -413,18 +484,22 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			setNeedCalibrateAccel(false);
 			continue;
 		}
+		if (getNeedCalibrateMag()) {
+			calibrateMag();
+			prevYaw = 0.f;
+			setNeedCalibrateMag(false);
+			continue;
+		}
 		// copy adjustable from outside values
 		lck.lock();
 		float desiredPitch = this->desiredPitch;
 		float desiredRoll = this->desiredRoll;
 		float pitchAdjust = this->pitchAdjust;
 		float rollAdjust = this->rollAdjust;
-		float desiredYawSpeed = this->desiredYawSpeed;
+		float desiredDirection = this->desiredDirection;
 		float desiredHeight = this->acceleration * 4.f;
 		float accTrust = this->accTrust;
-		float inclineFilteringCoef = this->inclineFilteringCoef;
-		float inclineChangeRateFilteringCoef = this->inclineChangeRateFilteringCoef;
-		float yawSpeedFilteringCoef = this->yawSpeedFilteringCoef;
+		float magTrust = this->magTrust;
 		float turnOffInclineAngle = this->turnOffInclineAngle;
 		int desiredLPFMode = this->imuLPFMode;
 
@@ -434,9 +509,9 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		float rollPropCoef = this->rollPropCoef;
 		float rollDerCoef = this->rollDerCoef;
 		float rollIntCoef = this->rollIntCoef;
-		float yawSpPropCoef = this->yawSpPropCoef;
-		float yawSpDerCoef = this->yawSpDerCoef;
-		float yawSpIntCoef = this->yawSpIntCoef;
+		float yawPropCoef = this->yawPropCoef;
+		float yawDerCoef = this->yawDerCoef;
+		float yawIntCoef = this->yawIntCoef;
 		float heightPropCoef = this->heightPropCoef;
 		float heightDerCoef = this->heightDerCoef;
 		float heightIntCoef = this->heightIntCoef;
@@ -454,8 +529,9 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		}
 
 		vec3 acc = normalize(getAccData());
-		vec3 gyro = getGyroData();
+		vec3 gyro = getGyroCalibratedData();
 		vec3 mag = getMagNormalizedData();
+		
 		float pressure = getBarData();
 
 		int64_t currentTimestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
@@ -463,20 +539,26 @@ void FlightController::start(InfoAdapter * infoAdapter)
 
 		float accPitch = degrees(atan2(acc.x, acc.z)) - pitchAccelCalibration;
 		float accRoll = -degrees(atan2(acc.y, acc.z)) - rollAccelCalibration;
-		float magYaw = degrees(atan2(mag.y, mag.x));
-
-		gyro -= gyroCalibration;
-
-		float currentYawSpeed = gyro.z;
 
 		float gyroPitch = prevPitch - gyro.y * secondsElapsed;
 		float gyroRoll = prevRoll - gyro.x * secondsElapsed;
+		float gyroYaw = prevYaw + gyro.z * secondsElapsed;
 		float gyroPitchTmp = gyroPitch;
-		gyroPitch -= gyroRoll * sin(radians(gyro.z * secondsElapsed));
+		float gyroRollTmp = gyroRoll;
+		gyroPitch -= gyroRollTmp * sin(radians(gyro.z * secondsElapsed));
 		gyroRoll += gyroPitchTmp * sin(radians(gyro.z * secondsElapsed));
+		gyroYaw += gyro.x * secondsElapsed * sin(radians(gyroPitchTmp));
+		gyroYaw -= gyro.y * secondsElapsed * sin(radians(gyroRollTmp));
 
 		float currentPitch = accPitch * accTrust + (1.f - accTrust) * gyroPitch;
 		float currentRoll = accRoll * accTrust + (1.f - accTrust) * gyroRoll;
+
+		vec3 staticMag = glm::rotateY(glm::rotateX(mag, radians(-currentPitch) ), radians(-currentRoll));
+		float magYaw = degrees(atan2(staticMag.y, staticMag.x)) - 90.f;
+		auto yawAngles = Utils::pepareAnglesForCombination(magYaw, gyroYaw);
+		
+		
+		float currentYaw = Utils::trimAngleTo360(yawAngles[0] * magTrust + (1.f - magTrust) * yawAngles[1]);
 		
 		setCurrentInclineVals(currentPitch, currentRoll);
 		auto heightVals = getUltrasonicHeightVals();
@@ -484,38 +566,32 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		
 		float currentPitchError = desiredPitch - currentPitch + pitchAdjust;
 		float currentRollError = desiredRoll - currentRoll + rollAdjust;
-		float currentYawSpeedError = desiredYawSpeed - currentYawSpeed;
+		auto yawAngles2 = Utils::pepareAnglesForCombination(-desiredDirection, currentYaw);
+		float currentYawError = yawAngles2[0] - yawAngles2[1];
 		float currentHeightError = desiredHeight - currentHeight;
 
-		float prevPitchError = desiredPitch - prevPitch;
-		float prevRollError = desiredRoll - prevRoll;
-		float prevYawSpeedError = desiredYawSpeed - prevYawSpeed;
-
-		float pitchErrorChangeRate = gyro.y + gyro.z * sin(radians(currentRoll));
-		float rollErrorChangeRate = gyro.x - gyro.z * sin(radians(currentPitch));
-		float yawSpeedErrorChangeRate = ((currentYawSpeedError - prevYawSpeedError) / secondsElapsed);
+		float pitchErrorChangeRate = gyro.y;
+		float rollErrorChangeRate = gyro.x;
+		float yawErrorChangeRate = -gyro.z;
 		float heightErrorChangeRate = -heightVals[1];
 
 		pitchErrInt += currentPitchError * secondsElapsed;
 		rollErrInt += currentRollError * secondsElapsed;
-		yawSpeedErrInt += currentYawSpeedError * secondsElapsed;
+		yawErrInt += currentYawError * secondsElapsed;
 		heightErrInt += currentHeightError * secondsElapsed;
 
 		prevPitch = currentPitch;
 		prevRoll = currentRoll;
-		prevYawSpeed = currentYawSpeed;
+		prevYaw = currentYaw;
 		prevHeight = currentHeight;
 		prevTimeStamp = currentTimestamp;
-		prevPitchErrChangeRate = pitchErrorChangeRate;
-		prevRollErrChangeRate = rollErrorChangeRate;
-		prevYawSpeedErrChangeRate = yawSpeedErrorChangeRate;
 		if (abs(currentPitch) > turnOffInclineAngle || abs(currentRoll) > turnOffInclineAngle) {
 			setTurnOffTrigger(true);
 		}
 		
 		int pitchMotorAdjust = (currentPitchError * pitchPropCoef + pitchErrorChangeRate * pitchDerCoef + pitchErrInt * pitchIntCoef);
 		int rollMotorAdjust = (currentRollError * rollPropCoef + rollErrorChangeRate * rollDerCoef + rollErrInt * rollIntCoef);
-		int yawMotorAdjust = currentYawSpeedError * yawSpPropCoef + yawSpeedErrorChangeRate * yawSpDerCoef + yawSpeedErrInt * yawSpIntCoef;
+		int yawMotorAdjust = currentYawError * yawPropCoef + yawErrorChangeRate * yawDerCoef + yawErrInt * yawIntCoef;
 		int heightMotorAdjust = (currentHeightError * heightPropCoef + heightErrorChangeRate * heightDerCoef + heightErrInt * heightIntCoef) * 1000;
 
 		int baseMotorVal = MIN_VAL + (MAX_VAL - MIN_VAL) * baseAcceleration;
@@ -534,7 +610,7 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			pitchErrInt = 0.f;
 			rollErrInt = 0.f;
 			heightErrInt = 0.f;
-			yawSpeedErrInt = 0.f;
+			yawErrInt = 0.f;
 		}
 		else
 		{
@@ -544,22 +620,30 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			if (currentTimestamp - infoSentTimeStamp >= 50)
 			{
 				infoSentTimeStamp = currentTimestamp;
+				// std::cout << "mag yaw " << Utils::trimAngleTo360(yawAngles[0]) << " gyro yaw " <<  Utils::trimAngleTo360(yawAngles[1]) << "\n";
 				infoAdapter->sendInfo(
 					currentPitchError,
 					currentRollError,
+
 					pitchErrorChangeRate,
 					rollErrorChangeRate,
+
 					currentHeightError,
 					heightErrorChangeRate,
+
+					currentYawError,
+					yawErrorChangeRate,
+
 					frontLeft,
 					frontRight,
 					backLeft,
 					backRight,
-					currentYawSpeedError,
+					
 					1.f / secondsElapsed,
+
 					pitchErrInt,
 					rollErrInt,
-					yawSpeedErrInt,
+					yawErrInt,
 					heightErrInt
 				);
 			}
@@ -593,6 +677,12 @@ void FlightController::scheduleCalibrateAccel()
 {
 	setNeedCalibrateAccel(true);
 }
+
+void FlightController::scheduleCalibrateMag()
+{
+	setNeedCalibrateMag(true);
+}
+
 
 void FlightController::setUltrasonicHeightVals(float val, float der)
 {
@@ -695,6 +785,18 @@ bool FlightController::getNeedCalibrateAccel()
 	return needCalibrateAccel;
 }
 
+void FlightController::setNeedCalibrateMag(bool val)
+{
+	std::unique_lock<std::mutex> lck(needCalibrateMagMtx);
+	needCalibrateMag = val;
+}
+
+bool FlightController::getNeedCalibrateMag()
+{
+	std::unique_lock<std::mutex> lck(needCalibrateMagMtx);
+	return needCalibrateMag;
+}
+
 void FlightController::setDesiredPitchAndRoll(float pitch, float roll)
 {
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
@@ -738,22 +840,22 @@ void FlightController::setRollIntCoef(float value)
 	rollIntCoef = value;
 }
 
-void FlightController::setYawSpPropCoef(float value)
+void FlightController::setYawPropCoef(float value)
 {
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
-	yawSpPropCoef = value;
+	yawPropCoef = value;
 }
 
-void FlightController::setYawSpDerCoef(float value)
+void FlightController::setYawDerCoef(float value)
 {
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
-	yawSpDerCoef = value;
+	yawDerCoef = value;
 }
 
-void FlightController::setYawSpIntCoef(float value)
+void FlightController::setYawIntCoef(float value)
 {
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
-	yawSpIntCoef = value;
+	yawIntCoef = value;
 }
 
 void FlightController::setHeightPropCoef(float value)
@@ -793,28 +895,10 @@ void FlightController::setAccTrust(float value)
 	accTrust = value;
 }
 
-void FlightController::setIncFilteringCoef(float value)
+void FlightController::setMagTrust(float value)
 {
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
-	inclineFilteringCoef = value;
-}
-
-void FlightController::setIncChangeRateFilteringCoef(float value)
-{
-	std::unique_lock<std::mutex> lck(commonCommandMtx);
-	inclineChangeRateFilteringCoef = value;
-}
-
-void FlightController::setYawSpFilteringCoef(float value)
-{
-	std::unique_lock<std::mutex> lck(commonCommandMtx);
-	yawSpeedFilteringCoef = value;
-}
-
-void FlightController::setYawSpChangeRateFilteringCoef(float value)
-{
-	std::unique_lock<std::mutex> lck(commonCommandMtx);
-	yawSpeedChangeRateFilteringCoef = value;
+	magTrust = value;
 }
 
 void FlightController::setTurnOffInclineAngle(float value)
@@ -857,4 +941,10 @@ void FlightController::setRollAdjust(float value)
 {
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
 	rollAdjust = value;
+}
+
+void FlightController::setDirection(float value)
+{
+	std::unique_lock<std::mutex> lck(commonCommandMtx);
+	desiredDirection = value;
 }

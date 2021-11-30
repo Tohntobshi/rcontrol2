@@ -10,19 +10,26 @@ public:
     void sendInfo(
         float currentPitchError,
         float currentRollError,
+
         float pitchErrorChangeRate,
         float rollErrorChangeRate,
+
         float currentHeightError,
         float heightErrorChangeRate,
+
+        float currentYawError,
+        float yawErrorChangeRate,
+        
         int32_t frontLeft,
         int32_t frontRight,
         int32_t backLeft,
         int32_t backRight,
-        float yawSpError,
+
         float pidLoopFreq,
+        
         float pitchErrInt,
         float rollErrInt,
-        float yawSpErrInt,
+        float yawErrInt,
         float heightErrInt
         );
 };

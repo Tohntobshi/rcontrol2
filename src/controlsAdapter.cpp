@@ -74,15 +74,9 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
-		if (msg.data[1] == Controls::SET_INCL_CH_RATE_FILTERING_COEF && msg.size == 6) {
+		if (msg.data[1] == Controls::SET_DIRECTION && msg.size == 6) {
 			float value = Utils::getFloatFromNet(msg.data + 2);
-			flightController->setIncChangeRateFilteringCoef(value);
-			delete[] msg.data;
-			continue;
-		}
-		if (msg.data[1] == Controls::SET_INCL_FILTERING_COEF && msg.size == 6) {
-			float value = Utils::getFloatFromNet(msg.data + 2);
-			flightController->setIncFilteringCoef(value);
+			flightController->setDirection(value);
 			delete[] msg.data;
 			continue;
 		}
@@ -128,27 +122,21 @@ void ControlsAdapter::start() {
 			continue;
 		}
 
-		if (msg.data[1] == Controls::SET_YAW_SP_PROP_COEF && msg.size == 6) {
+		if (msg.data[1] == Controls::SET_YAW_PROP_COEF && msg.size == 6) {
 			float value = Utils::getFloatFromNet(msg.data + 2);
-			flightController->setYawSpPropCoef(value);
+			flightController->setYawPropCoef(value);
 			delete[] msg.data;
 			continue;
 		}
-		if (msg.data[1] == Controls::SET_YAW_SP_DER_COEF && msg.size == 6) {
+		if (msg.data[1] == Controls::SET_YAW_DER_COEF && msg.size == 6) {
 			float value = Utils::getFloatFromNet(msg.data + 2);
-			flightController->setYawSpDerCoef(value);
+			flightController->setYawDerCoef(value);
 			delete[] msg.data;
 			continue;
 		}
-		if (msg.data[1] == Controls::SET_YAW_SP_INT_COEF && msg.size == 6) {
+		if (msg.data[1] == Controls::SET_YAW_INT_COEF && msg.size == 6) {
 			float value = Utils::getFloatFromNet(msg.data + 2);
-			flightController->setYawSpIntCoef(value);
-			delete[] msg.data;
-			continue;
-		}
-		if (msg.data[1] == Controls::SET_YAW_SP_FILTERING_COEF && msg.size == 6) {
-			float value = Utils::getFloatFromNet(msg.data + 2);
-			flightController->setYawSpFilteringCoef(value);
+			flightController->setYawIntCoef(value);
 			delete[] msg.data;
 			continue;
 		}
@@ -183,7 +171,11 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
-
+		if (msg.data[1] == Controls::CALIBRATE_MAG && msg.size == 2) {
+			flightController->scheduleCalibrateMag();
+			delete[] msg.data;
+			continue;
+		}
 		if (msg.data[1] == Controls::SET_PITCH_ADJUST && msg.size == 6) {
 			float value = Utils::getFloatFromNet(msg.data + 2);
 			flightController->setPitchAdjust(value);
@@ -194,6 +186,12 @@ void ControlsAdapter::start() {
 		if (msg.data[1] == Controls::SET_ROLL_ADJUST && msg.size == 6) {
 			float value = Utils::getFloatFromNet(msg.data + 2);
 			flightController->setRollAdjust(value);
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == Controls::SET_MAG_TRUST && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setMagTrust(value);
 			delete[] msg.data;
 			continue;
 		}
