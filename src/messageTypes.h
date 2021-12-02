@@ -9,6 +9,7 @@ enum MessageTypes : uint8_t
 
 enum Controls : uint8_t
 {
+    UNSET,
 	SET_PITCH_AND_ROLL,
     SET_DESIRED_HEIGHT_US,
     SET_DESIRED_HEIGHT_BAR,

@@ -78,5 +78,5 @@ void InfoAdapter::sendInfo(
     memcpy(data + 57, &tmp15, 4);
     memcpy(data + 61, &tmp16, 4);
     memcpy(data + 65, &tmp17, 4);
-    connection->enqueueToSend({ .data = data, .size = size }, true);
+    connection->enqueueToSend({ .data = data, .size = size, .ignoreWithoutConnection = true });
 }

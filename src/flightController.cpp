@@ -585,6 +585,10 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		prevYaw = currentYaw;
 		prevHeight = currentHeight;
 		prevTimeStamp = currentTimestamp;
+		if (currentHeight < 0.1f) {
+			currentYawError = 0.f;
+			yawErrInt = 0.f;
+		}
 		if (abs(currentPitch) > turnOffInclineAngle || abs(currentRoll) > turnOffInclineAngle) {
 			setTurnOffTrigger(true);
 		}

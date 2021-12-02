@@ -19,6 +19,7 @@ public:
 	public:
 		uint8_t *data;
 		unsigned int size;
+		bool ignoreWithoutConnection;
 	};
 	/// will block untill stopped from another thread
 	void start(BluetoothHelper *btHelper);
@@ -38,7 +39,7 @@ public:
 	 *  @param msg message to send, don't do any operations with its data after this call
 	 *  @param ignoreWithoutConnection if true message will be igrored and deleted if no connection
 	 */
-	void enqueueToSend(Message msg, bool ignoreWithoutConnection);
+	void enqueueToSend(Message msg);
 
 private:
 	int clientConnectionSocket = 0;

@@ -72,6 +72,13 @@ void Connection::start(BluetoothHelper *btHelper)
 		});
 		receiveMessages();
 		printf("connection failed\n");
+
+		std::unique_lock<std::mutex> lck(outgoingQueueMtx);
+		outgoingQueue.remove_if([](Message &val) -> bool {
+			return val.ignoreWithoutConnection;
+		});
+		lck.unlock();
+
 		setIsConnected(false);
 		close(clientConnectionSocket);
 		emptyOutgoingQueueCV.notify_all();
@@ -125,7 +132,7 @@ void Connection::receiveMessages()
 		auto &thisMessageTypeCV = emptyIncomingQueueCVs[messageType];
 		lck.unlock();
 		std::unique_lock<std::mutex> lck2(thisMessageTypeMtx);
-		thisMessageTypeQueue.push_back({data2, messageSize});
+		thisMessageTypeQueue.push_back({data2, messageSize, false});
 		thisMessageTypeCV.notify_all();
 	}
 }
@@ -193,9 +200,9 @@ bool Connection::receiveP(uint8_t *data, uint32_t size)
 	return true;
 }
 
-void Connection::enqueueToSend(Message msg, bool ignoreWithoutConnection)
+void Connection::enqueueToSend(Message msg)
 {
-	if (ignoreWithoutConnection && !getIsConnected())
+	if (msg.ignoreWithoutConnection && !getIsConnected())
 		return;
 	std::unique_lock<std::mutex> lck(outgoingQueueMtx);
 	outgoingQueue.push_back(msg);
