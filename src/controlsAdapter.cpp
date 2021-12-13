@@ -24,8 +24,8 @@ void ControlsAdapter::start() {
 		if (msg.data[1] == Controls::SET_PITCH_AND_ROLL && msg.size == 10) {
 			float x = Utils::getFloatFromNet(msg.data + 2);
 			float y = Utils::getFloatFromNet(msg.data + 6);
-			float pitch = std::min(std::max(-1.f, y), 1.f) * -20.f;
-			float roll = std::min(std::max(-1.f, x), 1.f) * -20.f;
+			float pitch = std::min(std::max(-1.f, y), 1.f) * -15.f;
+			float roll = std::min(std::max(-1.f, x), 1.f) * -15.f;
 			flightController->setDesiredPitchAndRoll(pitch, roll);
 			// printf("set pitch and roll %f %f\n", x, y);
 			delete[] msg.data;

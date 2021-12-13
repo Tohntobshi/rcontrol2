@@ -13,10 +13,10 @@ private:
 	FlightController();
 	~FlightController();
 	
-	void controlAll(uint32_t val);
-	void controlAll(uint32_t fl, uint32_t fr, uint32_t bl, uint32_t br);
-	void calibrate();
-	void arm();
+	void controlAllMotors(uint16_t val);
+	void controlAllMotors(uint16_t fl, uint16_t fr, uint16_t bl, uint16_t br);
+	void controlAllMotorsAux(uint16_t fl, uint16_t fr, uint16_t bl, uint16_t br);
+
 	std::array<float, 2> calibrateAccel();
 	void calibrateGyro();
 	void restorePrevGyroCalibration();
@@ -27,6 +27,7 @@ private:
 	int magFD = -1;
 	int barFD = -1;
 	int ultrasonicFD = -1;
+	int auxControllerFD = -1;
 	struct bmp280_dev bmp;
 
 	float aRes = 2.0 / 32768.0;
@@ -36,6 +37,7 @@ private:
 	glm::vec3 magRange;
 	glm::vec3 magMidVals;
 	glm::vec3 gyroCalibration;
+
 
 	static uint8_t readByte(uint8_t device, uint8_t reg);
 	static int8_t readBytes(uint8_t device, uint8_t reg, uint8_t * bytes, uint16_t count);
@@ -48,26 +50,6 @@ private:
 	glm::vec3 getMagNormalizedData();
 	float getUltrasonicHeightFromSensor();
 	float getBarData();
-
-	std::mutex ultrasonicHeightValsMtx;
-	float ultrasonicHeightVal = 0.f;
-	float ultrasonicHeightDerVal = 0.f;
-	void setUltrasonicHeightVals(float, float);
-	std::array<float, 2> getUltrasonicHeightVals();
-
-	std::mutex motorValsMtx;
-	int motorValFL = 0;
-	int motorValFR = 0;
-	int motorValBL = 0;
-	int motorValBR = 0;
-	void setMotorVals(int, int, int, int);
-	std::array<int, 4> getMotorVals();
-
-	std::mutex currentInclineValsMtx;
-	float currentPitch = 0;
-	float currentRoll = 0;
-	void setCurrentInclineVals(float, float);
-	std::array<float, 2> getCurrentInclineVals();
 
 	std::mutex shouldStopMtx;
 	bool shouldStop = false;

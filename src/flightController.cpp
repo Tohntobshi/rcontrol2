@@ -31,6 +31,7 @@ static unsigned int MOTOR_FL_PIN = 21;
 static unsigned int MOTOR_FR_PIN = 20;
 static unsigned int MOTOR_BL_PIN = 19;
 static unsigned int MOTOR_BR_PIN = 26;
+static unsigned int AUX_READY_PIN = 25;
 
 
 static vec3 flVec = normalize(vec3(-1.0, 1.0, 0.0));
@@ -116,57 +117,19 @@ FlightController::FlightController()
 	bmp280_set_config(&bmpConf, &bmp);
 	bmp280_set_power_mode(BMP280_NORMAL_MODE, &bmp);
 
-	ultrasonicFD = spiOpen(0, 32000, 0);
-	if (ultrasonicFD < 0)
+	auxControllerFD = spiOpen(0, 1000000, 0);
+	if (auxControllerFD < 0)
 	{
-		std::cout << "cant open ultrasonic sensor\n";
+		std::cout << "cant open auxillary controller\n";
 	}
-
-	gpioSetMode(MOTOR_FL_PIN, PI_OUTPUT);
-	gpioSetMode(MOTOR_FR_PIN, PI_OUTPUT);
-	gpioSetMode(MOTOR_BL_PIN, PI_OUTPUT);
-	gpioSetMode(MOTOR_BR_PIN, PI_OUTPUT);
-	gpioSetPWMfrequency(MOTOR_FL_PIN, 400);
-	gpioSetPWMrange(MOTOR_FL_PIN, 2500);
-	gpioSetPWMfrequency(MOTOR_FR_PIN, 400);
-	gpioSetPWMrange(MOTOR_FR_PIN, 2500);
-	gpioSetPWMfrequency(MOTOR_BL_PIN, 400);
-	gpioSetPWMrange(MOTOR_BL_PIN, 2500);
-	gpioSetPWMfrequency(MOTOR_BR_PIN, 400);
-	gpioSetPWMrange(MOTOR_BR_PIN, 2500);
-	controlAll(0);
+	gpioSetMode(AUX_READY_PIN, PI_INPUT);
+	gpioSetPullUpDown(AUX_READY_PIN, PI_PUD_DOWN);
+	controlAllMotors(0);
 }
 
 FlightController::~FlightController()
 {
 	gpioTerminate();
-}
-
-void FlightController::arm()
-{
-	std::cout << "arm\n";
-	controlAll(0);
-	std::this_thread::sleep_for(std::chrono::seconds(1));
-	controlAll(MAX_VAL);
-	std::this_thread::sleep_for(std::chrono::seconds(1));
-	controlAll(MIN_VAL);
-	std::this_thread::sleep_for(std::chrono::seconds(1));
-	std::cout << "arm finished\n";
-}
-
-void FlightController::calibrate()
-{
-	std::cout << "calibrate\n";
-	controlAll(0);
-	std::this_thread::sleep_for(std::chrono::seconds(3));
-	std::cout << "calibrate max\n";
-	controlAll(MAX_VAL);
-	std::this_thread::sleep_for(std::chrono::seconds(6));
-	std::cout << "calibrate min\n";
-	controlAll(MIN_VAL);
-	std::this_thread::sleep_for(std::chrono::seconds(6));
-	std::cout << "calibrate finished\n";
-	controlAll(0);
 }
 
 std::array<float, 2> FlightController::calibrateAccel()
@@ -216,22 +179,43 @@ void FlightController::restorePrevGyroCalibration()
 	gyroCalibration.z = z;
 }
 
-void FlightController::controlAll(uint32_t val)
+void FlightController::controlAllMotors(uint16_t val)
 {
-	uint32_t value = val == 0 ? 0 : std::min(MAX_VAL, std::max(MIN_VAL, val));
-	gpioPWM(MOTOR_FL_PIN, value);
-	gpioPWM(MOTOR_FR_PIN, value);
-	gpioPWM(MOTOR_BL_PIN, value);
-	gpioPWM(MOTOR_BR_PIN, value);
+	uint32_t value = val == 0 ? 0 : std::min((int)MAX_VAL, std::max((int)MIN_VAL, (int)val));
+	controlAllMotorsAux(value, value, value, value);
 }
 
-void FlightController::controlAll(uint32_t fl, uint32_t fr, uint32_t bl, uint32_t br)
+void FlightController::controlAllMotors(uint16_t fl, uint16_t fr, uint16_t bl, uint16_t br)
 {
-	gpioPWM(MOTOR_FL_PIN, std::min(MAX_VAL, std::max(MIN_VAL, fl)));
-	gpioPWM(MOTOR_FR_PIN, std::min(MAX_VAL, std::max(MIN_VAL, fr)));
-	gpioPWM(MOTOR_BL_PIN, std::min(MAX_VAL, std::max(MIN_VAL, bl)));
-	gpioPWM(MOTOR_BR_PIN, std::min(MAX_VAL, std::max(MIN_VAL, br)));
+	fl = std::min((int)MAX_VAL, std::max((int)MIN_VAL, (int)fl));
+	fr = std::min((int)MAX_VAL, std::max((int)MIN_VAL, (int)fr));
+	bl = std::min((int)MAX_VAL, std::max((int)MIN_VAL, (int)bl));
+	br = std::min((int)MAX_VAL, std::max((int)MIN_VAL, (int)br));
+	controlAllMotorsAux(fl, fr, bl, br);
 }
+
+void FlightController::controlAllMotorsAux(uint16_t fl, uint16_t fr, uint16_t bl, uint16_t br)
+{
+	uint8_t dummy[9];
+	uint8_t command[1] = { 1 }; // command to update motor vals
+	uint8_t values[9] = {
+		uint8_t(fl >> 8),
+		uint8_t(fl),
+		uint8_t(fr >> 8),
+		uint8_t(fr),
+		uint8_t(bl >> 8),
+		uint8_t(bl),
+		uint8_t(br >> 8),
+		uint8_t(br),
+		uint8_t((fl >> 8) + fl + (fr >> 8) + fr + (bl >> 8) + bl + (br >> 8) + br) // checksum
+	};
+	while(!gpioRead(AUX_READY_PIN)) {}
+	spiXfer(auxControllerFD, (char *)command, (char *)dummy, 1);
+	std::this_thread::sleep_for(std::chrono::microseconds(10));
+	while(!gpioRead(AUX_READY_PIN)) {}
+	spiXfer(auxControllerFD, (char *)values, (char *)dummy, 9);
+}
+
 
 uint8_t FlightController::readByte(uint8_t device, uint8_t reg)
 {
@@ -274,16 +258,23 @@ float FlightController::getUltrasonicHeightFromSensor()
 {
 	while (true)
 	{
-		uint8_t rawData[6];
-		uint8_t registers[6] = { 0, 1, 2, 3, 4, 5 };
-		spiXfer(ultrasonicFD, (char *)registers, (char *)rawData, 6);
-		uint8_t msb = rawData[2];
-		uint8_t lsb = rawData[3];
-		uint8_t chksum = rawData[4];
-		uint8_t chksum2 = rawData[5];
+		uint8_t dummy[4];
+		uint8_t command[1] = { 2 }; // command to send duration
+		uint8_t values[4];
+		while(!gpioRead(AUX_READY_PIN)) {}
+		spiXfer(auxControllerFD, (char *)command, (char *)dummy, 1);
+		std::this_thread::sleep_for(std::chrono::microseconds(10));
+		while(!gpioRead(AUX_READY_PIN)) {}
+		spiXfer(auxControllerFD, (char *)dummy, (char *)values, 4);
+
+		uint8_t msb = values[0];
+		uint8_t lsb = values[1];
+		uint8_t chksum = values[2];
+		uint8_t chksum2 = values[3];
 		uint8_t currentChkSum = (msb >> 4) + (msb & 0b00001111) + (lsb >> 4) + (lsb & 0b00001111);
 		uint8_t currentChkSum2 = (~msb) + (~lsb);
 		if (chksum != currentChkSum || chksum2 != currentChkSum2 || (msb == 0 && lsb == 0)) {
+			std::cout << "corrupted us data\n";
 			// corrupted data
 			std::this_thread::sleep_for(std::chrono::milliseconds(1));
 			continue;
@@ -407,62 +398,21 @@ float FlightController::getBarData()
 void FlightController::start(InfoAdapter * infoAdapter)
 {
 	setShouldStop(false);
-	std::thread usHeightSensorThread([&]() -> void {
-		float prevHeight = 0.f;
-		float prevDer = 0.f;
-		int64_t prevTimestamp = 0;
-		while(!getShouldStop()) {
-			float sensorHeight = getUltrasonicHeightFromSensor();
-			auto inclineVals = getCurrentInclineVals();
-			float pitch = inclineVals[0];
-			float roll = inclineVals[1];
-			int64_t currentTimestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
-			float secondsElapsed = (double)(currentTimestamp - prevTimestamp) / 1000.0;
-			float height = 0.f;
-			if (abs(pitch) > 15.f || abs(roll) > 15.f)
-			{
-				height = prevHeight;
-			}
-			else
-			{
-				height = sensorHeight * sqrt(1.f / (pow(tan(radians(roll)), 2) + pow(tan(radians(pitch)), 2) + 1)) * 0.2f + prevHeight * 0.8f;
-			}
-			float der = ((height - prevHeight) / secondsElapsed) * 0.2f + prevDer * 0.8f;
-			prevHeight = height;
-			prevDer = der;
-			prevTimestamp = currentTimestamp;
-			setUltrasonicHeightVals(height, der);
-			std::this_thread::sleep_for(std::chrono::milliseconds(10));
-		}
-	});
-	std::thread updateMotorsThread([&]() -> void {
-		while(!getShouldStop()) {
-			if (getNeedArm()) {
-				arm();
-				setNeedArm(false);
-				continue;
-			}
-			if (getNeedCalibrate()) {
-				calibrate();
-				arm();
-				setNeedCalibrate(false);
-				continue;
-			}
-			auto vals = getMotorVals();
-			controlAll(vals[0], vals[1], vals[2], vals[3]);
-			std::this_thread::sleep_for(std::chrono::microseconds(2500));
-		}
-	});
 	int64_t prevTimeStamp = 0;
 	int64_t infoSentTimeStamp = 0;
+	int64_t heightTakenTimeStamp = 0;
 	float prevPitch = 0.f;
 	float prevRoll = 0.f;
 	float prevYaw = 0.f;
 	float prevHeight = 0.f;
+	float prevHeightDer = 0.f;
 	float pitchErrInt = 0.f;
 	float rollErrInt = 0.f;
 	float yawErrInt = 0.f;
 	float heightErrInt = 0.f;
+	bool usePressureForHeightEstimation = false;
+	float groundPressure = 0.f;
+	float passivePressureChangeRate = 0.f;
 
 	std::unique_lock<std::mutex> lck(commonCommandMtx);
 	int currentLPFMode = imuLPFMode;
@@ -488,6 +438,11 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			calibrateMag();
 			prevYaw = 0.f;
 			setNeedCalibrateMag(false);
+			continue;
+		}
+		if (getNeedCalibrate()) {
+			// todo: signal aux controller to calibrate esc's
+			setNeedCalibrate(false);
 			continue;
 		}
 		// copy adjustable from outside values
@@ -528,17 +483,17 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			currentLPFMode = desiredLPFMode;
 		}
 
-		vec3 acc = normalize(getAccData());
+		vec3 acc = getAccData();
 		vec3 gyro = getGyroCalibratedData();
 		vec3 mag = getMagNormalizedData();
-		
+		float sensorHeight = getUltrasonicHeightFromSensor();
 		float pressure = getBarData();
 
 		int64_t currentTimestamp = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch()).count();
 		float secondsElapsed = (double)(currentTimestamp - prevTimeStamp) / 1000.0;
 
 		float accPitch = degrees(atan2(acc.x, acc.z)) - pitchAccelCalibration;
-		float accRoll = -degrees(atan2(acc.y, acc.z)) - rollAccelCalibration;
+		float accRoll = -degrees(atan2(acc.y, glm::length(vec2(acc.z, acc.x)) )) - rollAccelCalibration;
 
 		float gyroPitch = prevPitch - gyro.y * secondsElapsed;
 		float gyroRoll = prevRoll - gyro.x * secondsElapsed;
@@ -560,10 +515,21 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		
 		float currentYaw = Utils::trimAngleTo360(yawAngles[0] * magTrust + (1.f - magTrust) * yawAngles[1]);
 		
-		setCurrentInclineVals(currentPitch, currentRoll);
-		auto heightVals = getUltrasonicHeightVals();
-		float currentHeight = heightVals[0];
+		// float currentHeight = 0.f;
+		// if (abs(currentPitch) > 30.f || abs(currentRoll) > 30.f)
+		// {
+		// 	currentHeight = prevHeight;
+		// }
+		// else
+		// {
+		// 	currentHeight = sensorHeight * sqrt(1.f / (pow(tan(radians(currentRoll)), 2) + pow(tan(radians(currentPitch)), 2) + 1)) * 0.2f + prevHeight * 0.8f;
+		// }
+		float currentHeight = sensorHeight;
+		float heightDer = ((currentHeight - prevHeight) / secondsElapsed) * 0.2f + prevHeightDer * 0.8f;
+		prevHeight = currentHeight;
+		prevHeightDer = heightDer;
 		
+
 		float currentPitchError = desiredPitch - currentPitch + pitchAdjust;
 		float currentRollError = desiredRoll - currentRoll + rollAdjust;
 		auto yawAngles2 = Utils::pepareAnglesForCombination(-desiredDirection, currentYaw);
@@ -573,7 +539,7 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		float pitchErrorChangeRate = gyro.y;
 		float rollErrorChangeRate = gyro.x;
 		float yawErrorChangeRate = -gyro.z;
-		float heightErrorChangeRate = -heightVals[1];
+		float heightErrorChangeRate = -heightDer;
 
 		pitchErrInt += currentPitchError * secondsElapsed;
 		rollErrInt += currentRollError * secondsElapsed;
@@ -604,27 +570,35 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		int frontRight = baseMotorVal + heightMotorAdjust + pitchMotorAdjust + rollMotorAdjust - yawMotorAdjust;
 		int backLeft = baseMotorVal + heightMotorAdjust - pitchMotorAdjust - rollMotorAdjust - yawMotorAdjust;
 		int backRight = baseMotorVal + heightMotorAdjust - pitchMotorAdjust + rollMotorAdjust + yawMotorAdjust;
+
 		if (acceleration < 0.01f || turnOffTrigger)
 		{
 			frontLeft = MIN_VAL;
 			frontRight = MIN_VAL;
 			backLeft = MIN_VAL;
 			backRight = MIN_VAL;
-			setMotorVals(MIN_VAL, MIN_VAL, MIN_VAL, MIN_VAL);
 			pitchErrInt = 0.f;
 			rollErrInt = 0.f;
 			heightErrInt = 0.f;
 			yawErrInt = 0.f;
+			usePressureForHeightEstimation = false;
+			groundPressure = pressure;
+			passivePressureChangeRate = 0.f;
+			// pressure values look like this
+			// pressure 96828.2
+			// pressure 96827
+			// pressure 96825.7
+			// pressure 96825.7
+			// pressure 96826.3
+			// pressure 96825.7
+
 		}
-		else
-		{
-			setMotorVals(frontLeft, frontRight, backLeft, backRight);
-		}
+		controlAllMotors(frontLeft, frontRight, backLeft, backRight);
 		if (sendingInfo) {
 			if (currentTimestamp - infoSentTimeStamp >= 50)
 			{
 				infoSentTimeStamp = currentTimestamp;
-				// std::cout << "mag yaw " << Utils::trimAngleTo360(yawAngles[0]) << " gyro yaw " <<  Utils::trimAngleTo360(yawAngles[1]) << "\n";
+				// std::cout << "pressure " << pressure << "\n";
 				infoAdapter->sendInfo(
 					currentPitchError,
 					currentRollError,
@@ -653,8 +627,6 @@ void FlightController::start(InfoAdapter * infoAdapter)
 			}
 		}
 	}
-	usHeightSensorThread.join();
-	updateMotorsThread.join();
 }
 
 void FlightController::stop()
@@ -685,48 +657,6 @@ void FlightController::scheduleCalibrateAccel()
 void FlightController::scheduleCalibrateMag()
 {
 	setNeedCalibrateMag(true);
-}
-
-
-void FlightController::setUltrasonicHeightVals(float val, float der)
-{
-	std::unique_lock<std::mutex> lck(ultrasonicHeightValsMtx);
-	ultrasonicHeightVal = val;
-	ultrasonicHeightDerVal = der;
-}
-
-std::array<float, 2> FlightController::getUltrasonicHeightVals()
-{
-	std::unique_lock<std::mutex> lck(ultrasonicHeightValsMtx);
-	return { ultrasonicHeightVal, ultrasonicHeightDerVal };
-}
-
-void FlightController::setCurrentInclineVals(float pitch, float roll)
-{
-	std::unique_lock<std::mutex> lck(currentInclineValsMtx);
-	currentPitch = pitch;
-	currentRoll = roll;
-}
-
-std::array<float, 2> FlightController::getCurrentInclineVals()
-{
-	std::unique_lock<std::mutex> lck(currentInclineValsMtx);
-	return { currentPitch, currentRoll };
-}
-
-void FlightController::setMotorVals(int fl, int fr, int bl, int br)
-{
-	std::unique_lock<std::mutex> lck(motorValsMtx);
-	motorValFL = fl;
-	motorValFR = fr;
-	motorValBL = bl;
-	motorValBR = br;
-}
-
-std::array<int, 4> FlightController::getMotorVals()
-{
-	std::unique_lock<std::mutex> lck(motorValsMtx);
-	return { motorValFL, motorValFR, motorValBL, motorValBR };
 }
 
 void FlightController::setShouldStop(bool val)
