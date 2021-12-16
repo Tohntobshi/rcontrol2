@@ -13,12 +13,13 @@ using namespace glm;
 
 #define MPU9250_ADDRESS 0x68
 #define AK8963_ADDRESS 0x0C
-#define ULTRASONIC_ADDRESS 0x13
 
 #define ACCEL_XOUT_H 0x3B // Accel data first register
 #define GYRO_XOUT_H 0x43  // Gyro data first register
 #define USER_CTRL 0x6A	  // MPU9250 config
 #define INT_PIN_CFG 0x37  // MPU9250 config
+#define CONFIG 0x1A	// MPU9250 config
+#define ACCEL_CONFIG_2 0x1D // MPU9250 config
 
 #define AK8963_CNTL 0x0A   // Mag config
 #define AK8963_XOUT_L 0x03 // Mag data first register
@@ -27,17 +28,7 @@ using namespace glm;
 static unsigned int MIN_VAL = 1000;
 static unsigned int MAX_VAL = 2000;
 
-static unsigned int MOTOR_FL_PIN = 21;
-static unsigned int MOTOR_FR_PIN = 20;
-static unsigned int MOTOR_BL_PIN = 19;
-static unsigned int MOTOR_BR_PIN = 26;
 static unsigned int AUX_READY_PIN = 25;
-
-
-static vec3 flVec = normalize(vec3(-1.0, 1.0, 0.0));
-static vec3 frVec = normalize(vec3(1.0, 1.0, 0.0));
-static vec3 blVec = normalize(vec3(-1.0, -1.0, 0.0));
-static vec3 brVec = normalize(vec3(1.0, -1.0, 0.0));
 
 FlightController * FlightController::instance = nullptr;
 
@@ -73,8 +64,8 @@ FlightController::FlightController()
 	uint8_t intPinCfg = readByte(accGyroFD, INT_PIN_CFG);
 
 	writeByte(accGyroFD, INT_PIN_CFG, intPinCfg | 0b00000010); // set pass though mode for mpu9250 in order to have direct access to magnetometer
-	writeByte(accGyroFD, 26, imuLPFMode); // enable low pass filter for gyro
-	writeByte(accGyroFD, 29, imuLPFMode); // enable low pass filter for accel
+	writeByte(accGyroFD, CONFIG, imuLPFMode); // enable low pass filter for gyro
+	writeByte(accGyroFD, ACCEL_CONFIG_2, imuLPFMode); // enable low pass filter for accel
 	
 	restorePrevGyroCalibration();
 	
@@ -478,8 +469,8 @@ void FlightController::start(InfoAdapter * infoAdapter)
 
 		if (desiredLPFMode != currentLPFMode)
 		{
-			writeByte(accGyroFD, 26, desiredLPFMode);
-			writeByte(accGyroFD, 29, desiredLPFMode);
+			writeByte(accGyroFD, CONFIG, desiredLPFMode);
+			writeByte(accGyroFD, ACCEL_CONFIG_2, desiredLPFMode);
 			currentLPFMode = desiredLPFMode;
 		}
 
@@ -515,16 +506,20 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		
 		float currentYaw = Utils::trimAngleTo360(yawAngles[0] * magTrust + (1.f - magTrust) * yawAngles[1]);
 		
-		// float currentHeight = 0.f;
-		// if (abs(currentPitch) > 30.f || abs(currentRoll) > 30.f)
-		// {
-		// 	currentHeight = prevHeight;
-		// }
-		// else
-		// {
-		// 	currentHeight = sensorHeight * sqrt(1.f / (pow(tan(radians(currentRoll)), 2) + pow(tan(radians(currentPitch)), 2) + 1)) * 0.2f + prevHeight * 0.8f;
-		// }
-		float currentHeight = sensorHeight;
+		float currentHeight = 0.f;
+		float currentHeightError = 0.f;
+		if (abs(currentPitch) > 30.f || abs(currentRoll) > 30.f)
+		{
+			currentHeight = prevHeight;
+			currentHeightError = desiredHeight - currentHeight;
+		}
+		else
+		{
+			currentHeight = sensorHeight * sqrt(1.f / (pow(tan(radians(currentRoll)), 2) + pow(tan(radians(currentPitch)), 2) + 1)) * 0.2f + prevHeight * 0.8f;
+			currentHeightError = desiredHeight - currentHeight;
+			heightErrInt += currentHeightError * secondsElapsed;
+		}
+		// float currentHeight = sensorHeight;
 		float heightDer = ((currentHeight - prevHeight) / secondsElapsed) * 0.2f + prevHeightDer * 0.8f;
 		prevHeight = currentHeight;
 		prevHeightDer = heightDer;
@@ -534,7 +529,6 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		float currentRollError = desiredRoll - currentRoll + rollAdjust;
 		auto yawAngles2 = Utils::pepareAnglesForCombination(-desiredDirection, currentYaw);
 		float currentYawError = yawAngles2[0] - yawAngles2[1];
-		float currentHeightError = desiredHeight - currentHeight;
 
 		float pitchErrorChangeRate = gyro.y;
 		float rollErrorChangeRate = gyro.x;
@@ -544,7 +538,6 @@ void FlightController::start(InfoAdapter * infoAdapter)
 		pitchErrInt += currentPitchError * secondsElapsed;
 		rollErrInt += currentRollError * secondsElapsed;
 		yawErrInt += currentYawError * secondsElapsed;
-		heightErrInt += currentHeightError * secondsElapsed;
 
 		prevPitch = currentPitch;
 		prevRoll = currentRoll;
