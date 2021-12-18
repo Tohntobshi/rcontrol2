@@ -13,13 +13,9 @@ int main()
 		connection->start(btHelper);
 	});
 	InfoAdapter infoAdapter(connection);
-	std::thread flightThread([&]() -> void {
-		flightController->start(&infoAdapter);
-	});
+	flightController->setInfoAdapter(&infoAdapter);
 	ControlsAdapter controlsAdapter(connection, flightController);
 	controlsAdapter.start();
-
-	flightThread.join();
 	connThread.join();
 	return 0;
 }

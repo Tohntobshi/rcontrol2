@@ -1,19 +1,19 @@
 #pragma once
 #include <cstdint>
 
-enum MessageTypes : uint8_t
+enum class MessageTypes : uint8_t
 {
 	CONTROLS,
 	INFO
 };
 
-enum Controls : uint8_t
+enum class Controls : uint8_t
 {
-    UNSET,
+    UNSET = 0,
 	SET_PITCH_AND_ROLL,
     SET_DESIRED_HEIGHT_US,
     SET_DESIRED_HEIGHT_BAR,
-    SET_ACCELERATION,
+    SET_HEIGHT,
     SET_DIRECTION,
 
     SET_PITCH_PROP_COEF,
@@ -51,4 +51,54 @@ enum Controls : uint8_t
 
     SET_PITCH_ADJUST,
     SET_ROLL_ADJUST
+};
+
+enum class FlightControllerRegisters : uint8_t
+{
+    UNSET = 0,
+
+	SET_PITCH_AND_ROLL,
+	SET_DIRECTION,
+    SET_HEIGHT,
+    SET_BASE_ACCELERATION,
+
+    SET_PITCH_PROP_COEF,
+    SET_PITCH_DER_COEF,
+    SET_PITCH_INT_COEF,
+
+    SET_ROLL_PROP_COEF,
+    SET_ROLL_DER_COEF,
+    SET_ROLL_INT_COEF,
+
+    SET_YAW_PROP_COEF,
+    SET_YAW_DER_COEF,
+    SET_YAW_INT_COEF,
+
+    SET_HEIGHT_PROP_COEF,
+    SET_HEIGHT_DER_COEF,
+    SET_HEIGHT_INT_COEF,
+
+    SET_ACC_TRUST,
+    SET_MAG_TRUST,
+
+    SET_IMU_LPF_MODE,
+    RESET_TURN_OFF_TRIGGER,
+    SET_TURN_OFF_INCLINE_ANGLE,
+
+    SET_PITCH_ADJUST,
+    SET_ROLL_ADJUST,
+    
+    CALIBRATE_GYRO,
+    CALIBRATE_MAG,
+    CALIBRATE_ESC,
+
+    SET_GYRO_CALIBRATION,
+    SET_MAG_CALIBRATION,
+
+    GET_PITCH_AND_ROLL_INFO,
+    GET_YAW_AND_HEIGHT_INFO,
+    GET_MOTOR_VALS_AND_FREQ,
+
+    GET_GYRO_CALIBRATION,
+    GET_MAG_CALIBRATION
 };
