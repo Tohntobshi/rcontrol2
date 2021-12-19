@@ -23,7 +23,7 @@ private:
 	std::thread calibratingMagThread;
 
 	std::mutex spiInterfaceMutex;
-	void readBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
+	bool readBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
 	void writeBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
 
 	InfoAdapter * infoAdapter = nullptr;

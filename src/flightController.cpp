@@ -52,29 +52,44 @@ FlightController::~FlightController()
 	gpioTerminate();
 }
 
-void FlightController::readBytes(uint8_t reg, uint8_t * dest, uint8_t count)
+bool FlightController::readBytes(uint8_t reg, uint8_t * dest, uint8_t count)
 {
+	uint8_t data[count + 1];
 	std::unique_lock<std::mutex> lck(spiInterfaceMutex);
-	uint8_t dummy[count];
 	uint8_t registerToRead[1] = { reg | 0b10000000 }; // register + read flag
 	while(!gpioRead(AUX_READY_PIN)) {}
-	spiXfer(flightControllerFD, (char *)registerToRead, (char *)dummy, 1);
+	spiXfer(flightControllerFD, (char *)registerToRead, nullptr, 1);
 	std::this_thread::sleep_for(std::chrono::microseconds(10));
 	while(!gpioRead(AUX_READY_PIN)) {}
-	spiXfer(flightControllerFD, (char *)dummy, (char *)dest, count);
+	spiXfer(flightControllerFD, nullptr, (char *)data, count + 1);
+	uint8_t crc = reg;
+	for (int i = 0; i < count; i++)
+	{
+		crc = crc ^ data[i];
+		dest[i] = data[i];
+	}
 	std::this_thread::sleep_for(std::chrono::microseconds(10));
+	return data[count] == crc;
 }
 
 void FlightController::writeBytes(uint8_t reg, uint8_t * bytes, uint8_t count)
 {
+	uint8_t crc = reg;
+	uint8_t data[count + 1];
+	for (int i = 0; i < count; i++)
+	{
+		crc = crc ^ bytes[i];
+		data[i] = bytes[i];
+	}
+	data[count] = crc;
+	
 	std::unique_lock<std::mutex> lck(spiInterfaceMutex);
-	uint8_t dummy[count];
 	uint8_t registerToWrite[1] = { reg };
 	while(!gpioRead(AUX_READY_PIN)) {}
-	spiXfer(flightControllerFD, (char *)registerToWrite, (char *)dummy, 1);
+	spiXfer(flightControllerFD, (char *)registerToWrite, nullptr, 1);
 	std::this_thread::sleep_for(std::chrono::microseconds(10));
 	while(!gpioRead(AUX_READY_PIN)) {}
-	spiXfer(flightControllerFD, (char *)bytes, (char *)dummy, count);
+	spiXfer(flightControllerFD, (char *)data, nullptr, count + 1);
 	std::this_thread::sleep_for(std::chrono::microseconds(10));
 }
 
@@ -138,11 +153,11 @@ void FlightController::startSendingInfo()
 		while (!shouldStopSendInfo && infoAdapter)
 		{
 			uint8_t pitchAndRollInfo[24];
-			readBytes((uint8_t)FlightControllerRegisters::GET_PITCH_AND_ROLL_INFO, pitchAndRollInfo, 24);
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PITCH_AND_ROLL_INFO, pitchAndRollInfo, 24)) continue;
 			uint8_t yawAndHeightInfo[24];
-			readBytes((uint8_t)FlightControllerRegisters::GET_YAW_AND_HEIGHT_INFO, yawAndHeightInfo, 24);
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_YAW_AND_HEIGHT_INFO, yawAndHeightInfo, 24)) continue;
 			uint8_t motorValsAndFreq[12];
-			readBytes((uint8_t)FlightControllerRegisters::GET_MOTOR_VALS_AND_FREQ, motorValsAndFreq, 12);
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_MOTOR_VALS_AND_FREQ, motorValsAndFreq, 12)) continue;
 
 			float currentPitchError = Utils::getFloatFromNet(pitchAndRollInfo);
 			float pitchErrorChangeRate = Utils::getFloatFromNet(pitchAndRollInfo + 4);
@@ -210,7 +225,9 @@ void FlightController::scheduleCalibrateGyro()
 		writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_GYRO, &data, 1);
 		std::this_thread::sleep_for(std::chrono::seconds(10));
 		uint8_t calibData[12];
-		readBytes((uint8_t)FlightControllerRegisters::GET_GYRO_CALIBRATION, calibData, 12);
+
+		while (!readBytes((uint8_t)FlightControllerRegisters::GET_GYRO_CALIBRATION, calibData, 12)) {}
+		
 		float x = Utils::getFloatFromNet(calibData);
 		float y = Utils::getFloatFromNet(calibData + 4);
 		float z = Utils::getFloatFromNet(calibData + 8);
@@ -234,7 +251,7 @@ void FlightController::scheduleCalibrateMag()
 		writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_MAG, &data, 1);
 		std::this_thread::sleep_for(std::chrono::seconds(35));
 		uint8_t calibData[24];
-		readBytes((uint8_t)FlightControllerRegisters::GET_MAG_CALIBRATION, calibData, 24);
+		while (!readBytes((uint8_t)FlightControllerRegisters::GET_MAG_CALIBRATION, calibData, 24)) {};
 		float midx = Utils::getFloatFromNet(calibData);
 		float midy = Utils::getFloatFromNet(calibData + 4);
 		float midz = Utils::getFloatFromNet(calibData + 8);
