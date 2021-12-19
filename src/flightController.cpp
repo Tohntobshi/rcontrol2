@@ -3,8 +3,6 @@
 #include <iostream>
 #include <thread>
 #include <chrono>
-#include <math.h>
-#include <algorithm>
 #include "utils.h"
 #include <fstream>
 #include "messageTypes.h"
@@ -269,12 +267,12 @@ void FlightController::scheduleCalibrateMag()
 }
 
 
-void FlightController::setDesiredPitchAndRoll(float pitch, float roll)
+void FlightController::move(float x, float y)
 {
 	uint8_t data[8];
-	Utils::setFloatToNet(pitch, data);
-	Utils::setFloatToNet(roll, data + 4);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_AND_ROLL, data, 8);
+	Utils::setFloatToNet(x, data);
+	Utils::setFloatToNet(y, data + 4);
+	writeBytes((uint8_t)FlightControllerRegisters::MOVE, data, 8);
 }
 
 void FlightController::setPitchPropCoef(float value)

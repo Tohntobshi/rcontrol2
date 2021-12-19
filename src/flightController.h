@@ -1,6 +1,5 @@
 #pragma once
 #include <stdint.h>
-#include <thread>
 #include <mutex>
 #include "infoAdapter.h"
 
@@ -18,9 +17,6 @@ private:
 	bool shouldStopSendInfo = false;
 	bool calibratingGyro = false;
 	bool calibratingMag = false;
-	std::thread sendingInfoThread;
-	std::thread calibratingGyroThread;
-	std::thread calibratingMagThread;
 
 	std::mutex spiInterfaceMutex;
 	bool readBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
@@ -38,7 +34,7 @@ public:
 	void scheduleCalibrateGyro();
 	void scheduleCalibrateMag();
 
-	void setDesiredPitchAndRoll(float, float);
+	void move(float, float);
 	void setDirection(float);
 	void setHeight(float val);
 	void setBaseAcceleration(float val);

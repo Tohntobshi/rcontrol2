@@ -13,7 +13,7 @@ void ControlsAdapter::start() {
 		Connection::Message msg = connection->getMessage((uint8_t)MessageTypes::CONTROLS, true);
 		if (msg.size == 0) {
 			printf("received empty message\n");
-			flightController->setDesiredPitchAndRoll(0.f, 0.f);
+			flightController->move(0.f, 0.f);
 			continue;
 		}
 		if (msg.size < 2) {
@@ -21,12 +21,10 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
-		if (msg.data[1] == (uint8_t)Controls::SET_PITCH_AND_ROLL && msg.size == 10) {
+		if (msg.data[1] == (uint8_t)Controls::MOVE && msg.size == 10) {
 			float x = Utils::getFloatFromNet(msg.data + 2);
 			float y = Utils::getFloatFromNet(msg.data + 6);
-			float pitch = std::min(std::max(-1.f, y), 1.f) * -15.f;
-			float roll = std::min(std::max(-1.f, x), 1.f) * -15.f;
-			flightController->setDesiredPitchAndRoll(pitch, roll);
+			flightController->move(x, y);
 			// printf("set pitch and roll %f %f\n", x, y);
 			delete[] msg.data;
 			continue;

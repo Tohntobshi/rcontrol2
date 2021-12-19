@@ -10,7 +10,7 @@ enum class MessageTypes : uint8_t
 enum class Controls : uint8_t
 {
     UNSET = 0,
-	SET_PITCH_AND_ROLL,
+	MOVE,
     SET_DESIRED_HEIGHT_US,
     SET_DESIRED_HEIGHT_BAR,
     SET_HEIGHT,
@@ -57,7 +57,7 @@ enum class FlightControllerRegisters : uint8_t
 {
     UNSET = 0,
 
-	SET_PITCH_AND_ROLL,
+	MOVE,
 	SET_DIRECTION,
     SET_HEIGHT,
     SET_BASE_ACCELERATION,
