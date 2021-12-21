@@ -54,9 +54,9 @@ bool FlightController::readBytes(uint8_t reg, uint8_t * dest, uint8_t count)
 {
 	uint8_t data[count + 1];
 	std::unique_lock<std::mutex> lck(spiInterfaceMutex);
-	uint8_t registerToRead[1] = { reg | 0b10000000 }; // register + read flag
+	uint8_t registerToRead = reg | 0b10000000 ; // register + read flag
 	while(!gpioRead(AUX_READY_PIN)) {}
-	spiXfer(flightControllerFD, (char *)registerToRead, nullptr, 1);
+	spiXfer(flightControllerFD, (char *)&registerToRead, nullptr, 1);
 	std::this_thread::sleep_for(std::chrono::microseconds(10));
 	while(!gpioRead(AUX_READY_PIN)) {}
 	spiXfer(flightControllerFD, nullptr, (char *)data, count + 1);
@@ -70,7 +70,7 @@ bool FlightController::readBytes(uint8_t reg, uint8_t * dest, uint8_t count)
 	return data[count] == crc;
 }
 
-void FlightController::writeBytes(uint8_t reg, uint8_t * bytes, uint8_t count)
+bool FlightController::writeBytes(uint8_t reg, uint8_t * bytes, uint8_t count)
 {
 	uint8_t crc = reg;
 	uint8_t data[count + 1];
@@ -82,13 +82,17 @@ void FlightController::writeBytes(uint8_t reg, uint8_t * bytes, uint8_t count)
 	data[count] = crc;
 	
 	std::unique_lock<std::mutex> lck(spiInterfaceMutex);
-	uint8_t registerToWrite[1] = { reg };
 	while(!gpioRead(AUX_READY_PIN)) {}
-	spiXfer(flightControllerFD, (char *)registerToWrite, nullptr, 1);
+	spiXfer(flightControllerFD, (char *)&reg, nullptr, 1);
 	std::this_thread::sleep_for(std::chrono::microseconds(10));
 	while(!gpioRead(AUX_READY_PIN)) {}
 	spiXfer(flightControllerFD, (char *)data, nullptr, count + 1);
 	std::this_thread::sleep_for(std::chrono::microseconds(10));
+	uint8_t ack;
+	while(!gpioRead(AUX_READY_PIN)) {}
+	spiXfer(flightControllerFD, nullptr, (char *)&ack, 1);
+	std::this_thread::sleep_for(std::chrono::microseconds(10));
+	return uint8_t(~crc) == ack;
 }
 
 void FlightController::restorePrevGyroCalibration()
@@ -108,7 +112,7 @@ void FlightController::restorePrevGyroCalibration()
 	Utils::setFloatToNet(x, data);
 	Utils::setFloatToNet(y, data + 4);
 	Utils::setFloatToNet(z, data + 8);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_GYRO_CALIBRATION, data, 12);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_GYRO_CALIBRATION, data, 12)) { }
 }
 
 void FlightController::restorePrevMagCalibration()
@@ -134,7 +138,7 @@ void FlightController::restorePrevMagCalibration()
 	Utils::setFloatToNet(mRangeX, data + 12);
 	Utils::setFloatToNet(mRangeY, data + 16);
 	Utils::setFloatToNet(mRangeZ, data + 20);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_MAG_CALIBRATION, data, 24);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_MAG_CALIBRATION, data, 24)) { }
 }
 
 void FlightController::setInfoAdapter(InfoAdapter * adapter)
@@ -211,7 +215,7 @@ void FlightController::stopSendingInfo()
 void FlightController::scheduleCalibrateEsc()
 {
 	uint8_t data = 0;
-	writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_ESC, &data, 1);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_ESC, &data, 1)) { }
 }
 
 void FlightController::scheduleCalibrateGyro()
@@ -220,7 +224,7 @@ void FlightController::scheduleCalibrateGyro()
 	calibratingGyro = true;
 	std::thread thread([&]() -> void {
 		uint8_t data = 0;
-		writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_GYRO, &data, 1);
+		while (!writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_GYRO, &data, 1)) { }
 		std::this_thread::sleep_for(std::chrono::seconds(10));
 		uint8_t calibData[12];
 
@@ -246,7 +250,7 @@ void FlightController::scheduleCalibrateMag()
 	calibratingMag = true;
 	std::thread thread([&]() -> void {
 		uint8_t data = 0;
-		writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_MAG, &data, 1);
+		while (!writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_MAG, &data, 1)) { }
 		std::this_thread::sleep_for(std::chrono::seconds(35));
 		uint8_t calibData[24];
 		while (!readBytes((uint8_t)FlightControllerRegisters::GET_MAG_CALIBRATION, calibData, 24)) {};
@@ -272,91 +276,91 @@ void FlightController::move(float x, float y)
 	uint8_t data[8];
 	Utils::setFloatToNet(x, data);
 	Utils::setFloatToNet(y, data + 4);
-	writeBytes((uint8_t)FlightControllerRegisters::MOVE, data, 8);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::MOVE, data, 8)) { }
 }
 
 void FlightController::setPitchPropCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_PROP_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_PROP_COEF, data, 4)) { }
 }
 
 void FlightController::setPitchDerCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_DER_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_DER_COEF, data, 4)) { }
 }
 
 void FlightController::setPitchIntCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_INT_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_INT_COEF, data, 4)) { }
 }
 
 void FlightController::setRollPropCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_PROP_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_PROP_COEF, data, 4)) { }
 }
 
 void FlightController::setRollDerCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_DER_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_DER_COEF, data, 4)) { }
 }
 
 void FlightController::setRollIntCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_INT_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_INT_COEF, data, 4)) { }
 }
 
 void FlightController::setYawPropCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_YAW_PROP_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_YAW_PROP_COEF, data, 4)) { }
 }
 
 void FlightController::setYawDerCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_YAW_DER_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_YAW_DER_COEF, data, 4)) { }
 }
 
 void FlightController::setYawIntCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_YAW_INT_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_YAW_INT_COEF, data, 4)) { }
 }
 
 void FlightController::setHeightPropCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_PROP_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_PROP_COEF, data, 4)) { }
 }
 
 void FlightController::setHeightDerCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_DER_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_DER_COEF, data, 4)) { }
 }
 
 void FlightController::setHeightIntCoef(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_INT_COEF, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_INT_COEF, data, 4)) { }
 }
 
 
@@ -364,67 +368,67 @@ void FlightController::setHeight(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT, data, 4)) { }
 }
 
 void FlightController::setBaseAcceleration(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_BASE_ACCELERATION, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_BASE_ACCELERATION, data, 4)) { }
 }
 
 void FlightController::setAccTrust(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_ACC_TRUST, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ACC_TRUST, data, 4)) { }
 }
 
 void FlightController::setMagTrust(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_MAG_TRUST, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_MAG_TRUST, data, 4)) { }
 }
 
 void FlightController::setTurnOffInclineAngle(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_TURN_OFF_INCLINE_ANGLE, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_TURN_OFF_INCLINE_ANGLE, data, 4)) { }
 }
 
 
 void FlightController::resetTurnOffTrigger()
 {
 	uint8_t data = 0;
-	writeBytes((uint8_t)FlightControllerRegisters::RESET_TURN_OFF_TRIGGER, &data, 1);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::RESET_TURN_OFF_TRIGGER, &data, 1)) { }
 }
 
 void FlightController::setImuLPFMode(int value)
 {
 	uint8_t mode = std::min(6, std::max(1, value));
-	writeBytes((uint8_t)FlightControllerRegisters::SET_IMU_LPF_MODE, &mode, 1);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_IMU_LPF_MODE, &mode, 1)) { }
 }
 
 void FlightController::setPitchAdjust(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_ADJUST, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_ADJUST, data, 4)) { }
 }
 
 void FlightController::setRollAdjust(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_ADJUST, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_ADJUST, data, 4)) { }
 }
 
 void FlightController::setDirection(float value)
 {
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
-	writeBytes((uint8_t)FlightControllerRegisters::SET_DIRECTION, data, 4);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_DIRECTION, data, 4)) { }
 }

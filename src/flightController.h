@@ -20,7 +20,7 @@ private:
 
 	std::mutex spiInterfaceMutex;
 	bool readBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
-	void writeBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
+	bool writeBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
 
 	InfoAdapter * infoAdapter = nullptr;
 public:
