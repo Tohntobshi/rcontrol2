@@ -208,18 +208,34 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
-		if (msg.data[1] == (uint8_t)Controls::START_SENDING_INFO && msg.size == 2) {
-			flightController->startSendingInfo();
+		if (msg.data[1] == (uint8_t)Controls::START_SENDING_PRIMARY_INFO && msg.size == 2) {
+			flightController->startSendingPrimaryInfo();
 			#ifdef PRINT_COMMANDS
-			printf("start send info\n");
+			printf("start send primary info\n");
 			#endif
 			delete[] msg.data;
 			continue;
 		}
-		if (msg.data[1] == (uint8_t)Controls::STOP_SENDING_INFO && msg.size == 2) {
-			flightController->stopSendingInfo();
+		if (msg.data[1] == (uint8_t)Controls::STOP_SENDING_PRIMARY_INFO && msg.size == 2) {
+			flightController->stopSendingPrimaryInfo();
 			#ifdef PRINT_COMMANDS
-			printf("stop send info\n");
+			printf("stop send primary info\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::START_SENDING_SECONDARY_INFO && msg.size == 2) {
+			flightController->startSendingSecondaryInfo();
+			#ifdef PRINT_COMMANDS
+			printf("start send secondary info\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::STOP_SENDING_SECONDARY_INFO && msg.size == 2) {
+			flightController->stopSendingSecondaryInfo();
+			#ifdef PRINT_COMMANDS
+			printf("stop send secondary info\n");
 			#endif
 			delete[] msg.data;
 			continue;
@@ -272,6 +288,40 @@ void ControlsAdapter::start() {
 			flightController->setMagTrust(value);
 			#ifdef PRINT_COMMANDS
 			printf("set mag trust %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_ACC_FILTERING && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setAccFiltering(value);
+			#ifdef PRINT_COMMANDS
+			printf("set acc filtering %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::RESET_LANDING_FLAG && msg.size == 2) {
+			flightController->resetLandingFlag();
+			#ifdef PRINT_COMMANDS
+			printf("reset landing flag\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SWITCH_TO_RELATIVE_ACCELERATION && msg.size == 2) {
+			flightController->switchToRelativeAcceleration();
+			#ifdef PRINT_COMMANDS
+			printf("switch to relative acceleration\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_RELATIVE_ACCELERATION && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setRelativeAcceleration(value);
+			#ifdef PRINT_COMMANDS
+			printf("set relative acceleration %f\n", value);
 			#endif
 			delete[] msg.data;
 			continue;

@@ -13,8 +13,10 @@ private:
 	void restorePrevGyroCalibration();
 	int flightControllerFD = -1;
 
-	bool sendInfo = false;
-	bool shouldStopSendInfo = false;
+	bool sendSecondaryInfo = false;
+	bool shouldStopSendSecondaryInfo = false;
+	bool sendPrimaryInfo = false;
+	bool shouldStopSendPrimaryInfo = false;
 	bool calibratingGyro = false;
 	bool calibratingMag = false;
 
@@ -57,15 +59,23 @@ public:
 
 	void setAccTrust(float val);
 	void setMagTrust(float val);
+	void setAccFiltering(float val);
 	void setImuLPFMode(int val); // from 1 to 6
 
 	void setTurnOffInclineAngle(float val);
 	
 	void resetTurnOffTrigger();
 	
-	void startSendingInfo();
-	void stopSendingInfo();
+	void startSendingSecondaryInfo();
+	void stopSendingSecondaryInfo();
+
+	void startSendingPrimaryInfo();
+	void stopSendingPrimaryInfo();
 
 	void setPitchAdjust(float);
 	void setRollAdjust(float);
+
+	void resetLandingFlag();
+	void switchToRelativeAcceleration();
+	void setRelativeAcceleration(float);
 };

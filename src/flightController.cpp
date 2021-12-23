@@ -146,13 +146,13 @@ void FlightController::setInfoAdapter(InfoAdapter * adapter)
 	infoAdapter = adapter;
 }
 
-void FlightController::startSendingInfo()
+void FlightController::startSendingSecondaryInfo()
 {
-	if (sendInfo) return;
-	sendInfo = true;
-	shouldStopSendInfo = false;
+	if (sendSecondaryInfo) return;
+	sendSecondaryInfo = true;
+	shouldStopSendSecondaryInfo = false;
 	std::thread thread([&]() -> void {
-		while (!shouldStopSendInfo && infoAdapter)
+		while (!shouldStopSendSecondaryInfo && infoAdapter)
 		{
 			uint8_t pitchAndRollInfo[24];
 			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PITCH_AND_ROLL_INFO, pitchAndRollInfo, 24)) continue;
@@ -181,7 +181,7 @@ void FlightController::startSendingInfo()
 			uint16_t backRight = Utils::getShortFromNet(motorValsAndFreq + 6);
 			float freq = Utils::getFloatFromNet(motorValsAndFreq + 8);
 
-			infoAdapter->sendInfo(
+			infoAdapter->sendSecondaryInfo(
 				currentPitchError,
 				currentRollError,
 				pitchErrorChangeRate,
@@ -202,14 +202,39 @@ void FlightController::startSendingInfo()
 			);
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 		}
-		sendInfo = false;
+		sendSecondaryInfo = false;
 	});
 	thread.detach();
 }
 
-void FlightController::stopSendingInfo()
+void FlightController::stopSendingSecondaryInfo()
 {
-	shouldStopSendInfo = true;
+	shouldStopSendSecondaryInfo = true;
+}
+
+void FlightController::startSendingPrimaryInfo()
+{
+	if (sendPrimaryInfo) return;
+	sendPrimaryInfo = true;
+	shouldStopSendPrimaryInfo = false;
+	std::thread thread([&]() -> void {
+		while (!shouldStopSendPrimaryInfo && infoAdapter)
+		{
+			uint8_t landingFlag;
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PRIMARY_INFO, &landingFlag, 1)) continue;
+			infoAdapter->sendPrimaryInfo(
+				landingFlag
+			);
+			std::this_thread::sleep_for(std::chrono::milliseconds(200));
+		}
+		sendPrimaryInfo = false;
+	});
+	thread.detach();
+}
+
+void FlightController::stopSendingPrimaryInfo()
+{
+	shouldStopSendPrimaryInfo = true;
 }
 
 void FlightController::scheduleCalibrateEsc()
@@ -431,4 +456,30 @@ void FlightController::setDirection(float value)
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
 	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_DIRECTION, data, 4)) { }
+}
+
+void FlightController::setAccFiltering(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ACC_FILTERING, data, 4)) { }
+}
+
+void FlightController::resetLandingFlag()
+{
+	uint8_t data = 0;
+	while (!writeBytes((uint8_t)FlightControllerRegisters::RESET_LANDING_FLAG, &data, 1)) { }
+}
+
+void FlightController::switchToRelativeAcceleration()
+{
+	uint8_t data = 0;
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SWITCH_TO_RELATIVE_ACCELERATION, &data, 1)) { }
+}
+
+void FlightController::setRelativeAcceleration(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_RELATIVE_ACCELERATION, data, 4)) { }
 }

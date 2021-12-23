@@ -8,7 +8,7 @@ InfoAdapter::InfoAdapter(Connection * conn)
 {
 }
 
-void InfoAdapter::sendInfo(
+void InfoAdapter::sendSecondaryInfo(
     float currentPitchError,
     float currentRollError,
 
@@ -37,7 +37,7 @@ void InfoAdapter::sendInfo(
     uint32_t size = 69;
 
     uint8_t * data = new uint8_t[size];
-    data[0] = (uint8_t)MessageTypes::INFO;
+    data[0] = (uint8_t)MessageTypes::SECONDARY_INFO;
     Utils::setFloatToNet(currentPitchError, data + 1);
     Utils::setFloatToNet(currentRollError, data + 5);
     Utils::setFloatToNet(pitchErrorChangeRate, data + 9);
@@ -55,6 +55,19 @@ void InfoAdapter::sendInfo(
     Utils::setFloatToNet(rollErrInt, data + 57);
     Utils::setFloatToNet(yawErrInt, data + 61);
     Utils::setFloatToNet(heightErrInt, data + 65);
+
+    connection->enqueueToSend({ .data = data, .size = size, .ignoreWithoutConnection = true });
+}
+
+void InfoAdapter::sendPrimaryInfo(
+    uint8_t landingFlag
+)
+{
+    uint32_t size = 2;
+
+    uint8_t * data = new uint8_t[size];
+    data[0] = (uint8_t)MessageTypes::PRIMARY_INFO;
+    data[1] = landingFlag;
 
     connection->enqueueToSend({ .data = data, .size = size, .ignoreWithoutConnection = true });
 }

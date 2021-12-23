@@ -4,15 +4,14 @@
 enum class MessageTypes : uint8_t
 {
 	CONTROLS,
-	INFO
+	PRIMARY_INFO,
+    SECONDARY_INFO
 };
 
 enum class Controls : uint8_t
 {
-    UNSET = 0,
+    UNSET,
 	MOVE,
-    SET_DESIRED_HEIGHT_US,
-    SET_DESIRED_HEIGHT_BAR,
     SET_HEIGHT,
     SET_DIRECTION,
 
@@ -30,13 +29,14 @@ enum class Controls : uint8_t
 
     SET_ACC_TRUST,
     SET_MAG_TRUST,
+    SET_ACC_FILTERING,
 
     SET_HEIGHT_PROP_COEF,
     SET_HEIGHT_INT_COEF,
     SET_HEIGHT_DER_COEF,
 
-    START_SENDING_INFO,
-    STOP_SENDING_INFO,
+    START_SENDING_SECONDARY_INFO,
+    STOP_SENDING_SECONDARY_INFO,
 
     SET_BASE_ACCELERATION,
 
@@ -50,12 +50,18 @@ enum class Controls : uint8_t
     CALIBRATE_MAG,
 
     SET_PITCH_ADJUST,
-    SET_ROLL_ADJUST
+    SET_ROLL_ADJUST,
+
+    START_SENDING_PRIMARY_INFO,
+    STOP_SENDING_PRIMARY_INFO,
+    RESET_LANDING_FLAG,
+    SWITCH_TO_RELATIVE_ACCELERATION,
+    SET_RELATIVE_ACCELERATION
 };
 
 enum class FlightControllerRegisters : uint8_t
 {
-    UNSET = 0,
+    UNSET,
 
 	MOVE,
 	SET_DIRECTION,
@@ -80,6 +86,7 @@ enum class FlightControllerRegisters : uint8_t
 
     SET_ACC_TRUST,
     SET_MAG_TRUST,
+    SET_ACC_FILTERING,
 
     SET_IMU_LPF_MODE,
     RESET_TURN_OFF_TRIGGER,
@@ -100,5 +107,10 @@ enum class FlightControllerRegisters : uint8_t
     GET_MOTOR_VALS_AND_FREQ,
 
     GET_GYRO_CALIBRATION,
-    GET_MAG_CALIBRATION
+    GET_MAG_CALIBRATION,
+
+    RESET_LANDING_FLAG,
+    GET_PRIMARY_INFO,
+    SWITCH_TO_RELATIVE_ACCELERATION,
+    SET_RELATIVE_ACCELERATION
 };

@@ -7,7 +7,7 @@ private:
     Connection * connection = nullptr;
 public:
     InfoAdapter(Connection * conn);
-    void sendInfo(
+    void sendSecondaryInfo(
         float currentPitchError,
         float currentRollError,
 
@@ -32,4 +32,7 @@ public:
         float yawErrInt,
         float heightErrInt
         );
+    void sendPrimaryInfo(
+        uint8_t landingFlag
+    );
 };
