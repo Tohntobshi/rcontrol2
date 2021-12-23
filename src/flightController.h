@@ -78,4 +78,7 @@ public:
 	void resetLandingFlag();
 	void switchToRelativeAcceleration();
 	void setRelativeAcceleration(float);
+
+	void setUsHeightFiltering(float);
+	void setUsHeightDerFiltering(float);
 };

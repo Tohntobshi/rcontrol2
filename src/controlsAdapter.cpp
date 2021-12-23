@@ -326,6 +326,24 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == (uint8_t)Controls::SET_US_HEIGHT_FILTERING && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setUsHeightFiltering(value);
+			#ifdef PRINT_COMMANDS
+			printf("set us height filtering %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_US_HEIGHT_DER_FILTERING && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setUsHeightDerFiltering(value);
+			#ifdef PRINT_COMMANDS
+			printf("set us height der filtering %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
 		#ifdef PRINT_COMMANDS
 		printf("got message\n");
 		#endif
