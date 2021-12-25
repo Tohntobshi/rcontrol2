@@ -30,9 +30,11 @@ public:
         float pitchErrInt,
         float rollErrInt,
         float yawErrInt,
-        float heightErrInt
+        float heightErrInt,
+        float voltage
         );
     void sendPrimaryInfo(
-        uint8_t landingFlag
+        uint8_t landingFlag,
+        float voltage
     );
 };

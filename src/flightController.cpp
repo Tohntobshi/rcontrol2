@@ -158,8 +158,8 @@ void FlightController::startSendingSecondaryInfo()
 			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PITCH_AND_ROLL_INFO, pitchAndRollInfo, 24)) continue;
 			uint8_t yawAndHeightInfo[24];
 			if (!readBytes((uint8_t)FlightControllerRegisters::GET_YAW_AND_HEIGHT_INFO, yawAndHeightInfo, 24)) continue;
-			uint8_t motorValsAndFreq[12];
-			if (!readBytes((uint8_t)FlightControllerRegisters::GET_MOTOR_VALS_AND_FREQ, motorValsAndFreq, 12)) continue;
+			uint8_t motorValsAndFreq[16];
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_MOTOR_VALS_FREQ_AND_VOLTAGE, motorValsAndFreq, 16)) continue;
 
 			float currentPitchError = Utils::getFloatFromNet(pitchAndRollInfo);
 			float pitchErrorChangeRate = Utils::getFloatFromNet(pitchAndRollInfo + 4);
@@ -180,6 +180,7 @@ void FlightController::startSendingSecondaryInfo()
 			uint16_t backLeft = Utils::getShortFromNet(motorValsAndFreq + 4);
 			uint16_t backRight = Utils::getShortFromNet(motorValsAndFreq + 6);
 			float freq = Utils::getFloatFromNet(motorValsAndFreq + 8);
+			float voltage = Utils::getFloatFromNet(motorValsAndFreq + 12);
 
 			infoAdapter->sendSecondaryInfo(
 				currentPitchError,
@@ -198,7 +199,8 @@ void FlightController::startSendingSecondaryInfo()
 				pitchErrInt,
 				rollErrInt,
 				yawErrInt,
-				heightErrInt
+				heightErrInt,
+				voltage
 			);
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 		}
@@ -220,10 +222,11 @@ void FlightController::startSendingPrimaryInfo()
 	std::thread thread([&]() -> void {
 		while (!shouldStopSendPrimaryInfo && infoAdapter)
 		{
-			uint8_t landingFlag;
-			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PRIMARY_INFO, &landingFlag, 1)) continue;
+			uint8_t data[5];
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PRIMARY_INFO, data, 5)) continue;
 			infoAdapter->sendPrimaryInfo(
-				landingFlag
+				data[0],
+				Utils::getFloatFromNet(data + 1)
 			);
 			std::this_thread::sleep_for(std::chrono::milliseconds(200));
 		}

@@ -31,10 +31,12 @@ void InfoAdapter::sendSecondaryInfo(
     float pitchErrInt,
     float rollErrInt,
     float yawErrInt,
-    float heightErrInt
+    float heightErrInt,
+
+    float voltage
 )
 {
-    uint32_t size = 69;
+    uint32_t size = 73;
 
     uint8_t * data = new uint8_t[size];
     data[0] = (uint8_t)MessageTypes::SECONDARY_INFO;
@@ -55,19 +57,22 @@ void InfoAdapter::sendSecondaryInfo(
     Utils::setFloatToNet(rollErrInt, data + 57);
     Utils::setFloatToNet(yawErrInt, data + 61);
     Utils::setFloatToNet(heightErrInt, data + 65);
+    Utils::setFloatToNet(voltage, data + 69);
 
     connection->enqueueToSend({ .data = data, .size = size, .ignoreWithoutConnection = true });
 }
 
 void InfoAdapter::sendPrimaryInfo(
-    uint8_t landingFlag
+    uint8_t landingFlag,
+    float voltage
 )
 {
-    uint32_t size = 2;
+    uint32_t size = 6;
 
     uint8_t * data = new uint8_t[size];
     data[0] = (uint8_t)MessageTypes::PRIMARY_INFO;
     data[1] = landingFlag;
+    Utils::setFloatToNet(voltage, data + 2);
 
     connection->enqueueToSend({ .data = data, .size = size, .ignoreWithoutConnection = true });
 }
