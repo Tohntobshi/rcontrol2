@@ -199,11 +199,20 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
-		if (msg.data[1] == (uint8_t)Controls::SET_IMU_LPF_MODE && msg.size == 6) {
+		if (msg.data[1] == (uint8_t)Controls::SET_ACC_LPF_MODE && msg.size == 6) {
 			int value = Utils::getIntFromNet(msg.data + 2);
-			flightController->setImuLPFMode(value);
+			flightController->setAccLPFMode(value);
 			#ifdef PRINT_COMMANDS
-			printf("set imu lpf mode %d\n", value);
+			printf("set acc lpf mode %d\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_GYRO_LPF_MODE && msg.size == 6) {
+			int value = Utils::getIntFromNet(msg.data + 2);
+			flightController->setGyroLPFMode(value);
+			#ifdef PRINT_COMMANDS
+			printf("set gyro lpf mode %d\n", value);
 			#endif
 			delete[] msg.data;
 			continue;
@@ -340,6 +349,50 @@ void ControlsAdapter::start() {
 			flightController->setUsHeightDerFiltering(value);
 			#ifdef PRINT_COMMANDS
 			printf("set us height der filtering %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_PITCH_I_LIMIT && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPitchIntLimit(value);
+			#ifdef PRINT_COMMANDS
+			printf("set pitch i limit %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_ROLL_I_LIMIT && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setRollIntLimit(value);
+			#ifdef PRINT_COMMANDS
+			printf("set roll i limit %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_YAW_I_LIMIT && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setYawIntLimit(value);
+			#ifdef PRINT_COMMANDS
+			printf("set yaw i limit %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_HEIGHT_I_LIMIT && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setHeightIntLimit(value);
+			#ifdef PRINT_COMMANDS
+			printf("set height i limit %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::CALIBRATE_ACC && msg.size == 2) {
+			flightController->scheduleCalibrateAcc();
+			#ifdef PRINT_COMMANDS
+			printf("calibrate acc\n");
 			#endif
 			delete[] msg.data;
 			continue;

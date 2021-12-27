@@ -9,6 +9,7 @@ private:
 	static FlightController * instance;
 	FlightController();
 	~FlightController();
+	void restorePrevAccCalibration();
 	void restorePrevMagCalibration();
 	void restorePrevGyroCalibration();
 	int flightControllerFD = -1;
@@ -17,6 +18,7 @@ private:
 	bool shouldStopSendSecondaryInfo = false;
 	bool sendPrimaryInfo = false;
 	bool shouldStopSendPrimaryInfo = false;
+	bool calibratingAcc = false;
 	bool calibratingGyro = false;
 	bool calibratingMag = false;
 
@@ -35,6 +37,7 @@ public:
 	void scheduleCalibrateEsc();
 	void scheduleCalibrateGyro();
 	void scheduleCalibrateMag();
+	void scheduleCalibrateAcc();
 
 	void move(float, float);
 	void setDirection(float);
@@ -60,7 +63,8 @@ public:
 	void setAccTrust(float val);
 	void setMagTrust(float val);
 	void setAccFiltering(float val);
-	void setImuLPFMode(int val); // from 1 to 6
+	void setAccLPFMode(int val); // from 1 to 6
+	void setGyroLPFMode(int val); // from 1 to 6
 
 	void setTurnOffInclineAngle(float val);
 	
@@ -81,4 +85,9 @@ public:
 
 	void setUsHeightFiltering(float);
 	void setUsHeightDerFiltering(float);
+
+	void setPitchIntLimit(float val);
+	void setRollIntLimit(float val);
+	void setYawIntLimit(float val);
+	void setHeightIntLimit(float val);
 };

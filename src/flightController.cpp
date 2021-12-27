@@ -41,6 +41,7 @@ FlightController::FlightController()
 	}
 	gpioSetMode(AUX_READY_PIN, PI_INPUT);
 	gpioSetPullUpDown(AUX_READY_PIN, PI_PUD_DOWN);
+	restorePrevAccCalibration();
 	restorePrevGyroCalibration();
 	restorePrevMagCalibration();
 }
@@ -93,6 +94,26 @@ bool FlightController::writeBytes(uint8_t reg, uint8_t * bytes, uint8_t count)
 	spiXfer(flightControllerFD, nullptr, (char *)&ack, 1);
 	std::this_thread::sleep_for(std::chrono::microseconds(10));
 	return uint8_t(~crc) == ack;
+}
+
+void FlightController::restorePrevAccCalibration()
+{
+	std::ifstream file;
+	file.open("/home/pi/acccalibration");
+	if (!file.is_open()) return;
+	std::string line;
+	std::getline(file, line);
+	file.close();
+	float x;
+	float y;
+	float z;
+	sscanf(line.c_str(), "%f,%f,%f", &x, &y, &z);
+	// std::cout << "gonna send acc calib " << x << " " << y << " " << z << "\n";
+	uint8_t data[12];
+	Utils::setFloatToNet(x, data);
+	Utils::setFloatToNet(y, data + 4);
+	Utils::setFloatToNet(z, data + 8);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ACC_CALIBRATION, data, 12)) { }
 }
 
 void FlightController::restorePrevGyroCalibration()
@@ -244,6 +265,31 @@ void FlightController::scheduleCalibrateEsc()
 {
 	uint8_t data = 0;
 	while (!writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_ESC, &data, 1)) { }
+}
+
+void FlightController::scheduleCalibrateAcc()
+{
+	if (calibratingAcc) return;
+	calibratingAcc = true;
+	std::thread thread([&]() -> void {
+		uint8_t data = 0;
+		while (!writeBytes((uint8_t)FlightControllerRegisters::CALIBRATE_ACC, &data, 1)) { }
+		std::this_thread::sleep_for(std::chrono::seconds(10));
+		uint8_t calibData[12];
+
+		while (!readBytes((uint8_t)FlightControllerRegisters::GET_ACC_CALIBRATION, calibData, 12)) {}
+		
+		float x = Utils::getFloatFromNet(calibData);
+		float y = Utils::getFloatFromNet(calibData + 4);
+		float z = Utils::getFloatFromNet(calibData + 8);
+		// std::cout << "got acc calib " << x << " " << y << " " << z << "\n";
+		std::ofstream file;
+		file.open("/home/pi/acccalibration", std::ofstream::out | std::ofstream::trunc);
+		file << x << "," << y << "," << z << "\n";
+		file.close();
+		calibratingAcc = false;
+	});
+	thread.detach();
 }
 
 void FlightController::scheduleCalibrateGyro()
@@ -434,10 +480,16 @@ void FlightController::resetTurnOffTrigger()
 	while (!writeBytes((uint8_t)FlightControllerRegisters::RESET_TURN_OFF_TRIGGER, &data, 1)) { }
 }
 
-void FlightController::setImuLPFMode(int value)
+void FlightController::setAccLPFMode(int value)
 {
 	uint8_t mode = std::min(6, std::max(1, value));
-	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_IMU_LPF_MODE, &mode, 1)) { }
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ACC_LPF_MODE, &mode, 1)) { }
+}
+
+void FlightController::setGyroLPFMode(int value)
+{
+	uint8_t mode = std::min(6, std::max(1, value));
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_GYRO_LPF_MODE, &mode, 1)) { }
 }
 
 void FlightController::setPitchAdjust(float value)
@@ -499,4 +551,32 @@ void FlightController::setUsHeightDerFiltering(float value)
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
 	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_US_HEIGHT_DER_FILTERING, data, 4)) { }
+}
+
+void FlightController::setPitchIntLimit(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_PITCH_I_LIMIT, data, 4)) { }
+}
+
+void FlightController::setRollIntLimit(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_ROLL_I_LIMIT, data, 4)) { }
+}
+
+void FlightController::setYawIntLimit(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_YAW_I_LIMIT, data, 4)) { }
+}
+
+void FlightController::setHeightIntLimit(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_I_LIMIT, data, 4)) { }
 }
