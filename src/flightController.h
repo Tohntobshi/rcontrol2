@@ -90,4 +90,11 @@ public:
 	void setRollIntLimit(float val);
 	void setYawIntLimit(float val);
 	void setHeightIntLimit(float val);
+
+	void setMotorCurveA(float val);
+	void setMotorCurveB(float val);
+	void setVoltageDropCurveA(float val);
+	void setVoltageDropCurveB(float val);
+	void setPowerLossCurveA(float val);
+	void setPowerLossCurveB(float val);
 };

@@ -580,3 +580,45 @@ void FlightController::setHeightIntLimit(float value)
 	Utils::setFloatToNet(value, data);
 	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_I_LIMIT, data, 4)) { }
 }
+
+void FlightController::setMotorCurveA(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_MOTOR_CURVE_A, data, 4)) { }
+}
+
+void FlightController::setMotorCurveB(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_MOTOR_CURVE_B, data, 4)) { }
+}
+
+void FlightController::setVoltageDropCurveA(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_VOLTAGE_DROP_CURVE_A, data, 4)) { }
+}
+
+void FlightController::setVoltageDropCurveB(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_VOLTAGE_DROP_CURVE_B, data, 4)) { }
+}
+
+void FlightController::setPowerLossCurveA(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POWER_LOSS_CURVE_A, data, 4)) { }
+}
+
+void FlightController::setPowerLossCurveB(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POWER_LOSS_CURVE_B, data, 4)) { }
+}

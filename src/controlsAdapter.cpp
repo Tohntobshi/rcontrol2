@@ -397,6 +397,60 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == (uint8_t)Controls::SET_MOTOR_CURVE_A && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setMotorCurveA(value);
+			#ifdef PRINT_COMMANDS
+			printf("set motor curve a %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_MOTOR_CURVE_B && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setMotorCurveB(value);
+			#ifdef PRINT_COMMANDS
+			printf("set motor curve b %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_VOLTAGE_DROP_CURVE_A && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setVoltageDropCurveA(value);
+			#ifdef PRINT_COMMANDS
+			printf("set voltage drop curve a %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_VOLTAGE_DROP_CURVE_B && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setVoltageDropCurveB(value);
+			#ifdef PRINT_COMMANDS
+			printf("set voltage drop curve b %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_POWER_LOSS_CURVE_A && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPowerLossCurveA(value);
+			#ifdef PRINT_COMMANDS
+			printf("set power loss curve a %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_POWER_LOSS_CURVE_B && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPowerLossCurveB(value);
+			#ifdef PRINT_COMMANDS
+			printf("set power loss curve a %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
 		#ifdef PRINT_COMMANDS
 		printf("got message\n");
 		#endif
