@@ -622,3 +622,10 @@ void FlightController::setPowerLossCurveB(float value)
 	Utils::setFloatToNet(value, data);
 	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POWER_LOSS_CURVE_B, data, 4)) { }
 }
+
+void FlightController::setHeightNegativeIntCoef(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_NEGATIVE_INT_COEF, data, 4)) { }
+}

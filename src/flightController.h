@@ -97,4 +97,6 @@ public:
 	void setVoltageDropCurveB(float val);
 	void setPowerLossCurveA(float val);
 	void setPowerLossCurveB(float val);
+
+	void setHeightNegativeIntCoef(float val);
 };

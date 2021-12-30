@@ -451,6 +451,15 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == (uint8_t)Controls::SET_HEIGHT_NEGATIVE_INT_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setHeightNegativeIntCoef(value);
+			#ifdef PRINT_COMMANDS
+			printf("set height negative int coef %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
 		#ifdef PRINT_COMMANDS
 		printf("got message\n");
 		#endif

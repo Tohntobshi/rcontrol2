@@ -72,7 +72,9 @@ enum class Controls : uint8_t
     SET_VOLTAGE_DROP_CURVE_A,
     SET_VOLTAGE_DROP_CURVE_B,
     SET_POWER_LOSS_CURVE_A,
-    SET_POWER_LOSS_CURVE_B
+    SET_POWER_LOSS_CURVE_B,
+
+    SET_HEIGHT_NEGATIVE_INT_COEF
 };
 
 enum class FlightControllerRegisters : uint8_t
@@ -147,5 +149,7 @@ enum class FlightControllerRegisters : uint8_t
     SET_VOLTAGE_DROP_CURVE_A,
     SET_VOLTAGE_DROP_CURVE_B,
     SET_POWER_LOSS_CURVE_A,
-    SET_POWER_LOSS_CURVE_B
+    SET_POWER_LOSS_CURVE_B,
+
+    SET_HEIGHT_NEGATIVE_INT_COEF
 };
