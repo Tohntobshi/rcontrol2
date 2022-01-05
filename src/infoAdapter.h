@@ -31,10 +31,19 @@ public:
         float rollErrInt,
         float yawErrInt,
         float heightErrInt,
-        float voltage
+        float voltage,
+
+        float currentPosXError,
+        float currentPosYError,
+        float posXErrorChangeRate,
+        float posYErrorChangeRate,
+        float posXErrorInt,
+        float posYErrorInt
         );
     void sendPrimaryInfo(
         uint8_t landingFlag,
-        float voltage
+        float voltage,
+        uint8_t positionValidity,
+        int32_t satelitesAmount
     );
 };

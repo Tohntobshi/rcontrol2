@@ -460,6 +460,114 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == (uint8_t)Controls::SET_POSITION_PROP_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPositionPropCoef(value);
+			#ifdef PRINT_COMMANDS
+			printf("set position prop coef %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_POSITION_DER_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPositionDerCoef(value);
+			#ifdef PRINT_COMMANDS
+			printf("set position der coef %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_POSITION_INT_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPositionIntCoef(value);
+			#ifdef PRINT_COMMANDS
+			printf("set position int coef %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_POSITION_I_LIMIT && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPositionIntLimit(value);
+			#ifdef PRINT_COMMANDS
+			printf("set position int limit %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_BAR_HEIGHT_PROP_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setBarHeightPropCoef(value);
+			#ifdef PRINT_COMMANDS
+			printf("set bar height prop coef %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_BAR_HEIGHT_DER_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setBarHeightDerCoef(value);
+			#ifdef PRINT_COMMANDS
+			printf("set bar height der coef %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_BAR_HEIGHT_INT_COEF && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setBarHeightIntCoef(value);
+			#ifdef PRINT_COMMANDS
+			printf("set bar height int coef %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_BAR_HEIGHT_FILTERING && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setBarHeightFiltering(value);
+			#ifdef PRINT_COMMANDS
+			printf("set bar height filtering %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_BAR_HEIGHT_DER_FILTERING && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setBarHeightDerFiltering(value);
+			#ifdef PRINT_COMMANDS
+			printf("set bar height der filtering %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_POSITION_FILTERING && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPositionFiltering(value);
+			#ifdef PRINT_COMMANDS
+			printf("set position filtering %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_POSITION_DER_FILTERING && msg.size == 6) {
+			float value = Utils::getFloatFromNet(msg.data + 2);
+			flightController->setPositionDerFiltering(value);
+			#ifdef PRINT_COMMANDS
+			printf("set position der filtering %f\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::SET_HOLD_MODE && msg.size == 6) {
+			int value = Utils::getIntFromNet(msg.data + 2);
+			flightController->setHoldMode(value);
+			#ifdef PRINT_COMMANDS
+			printf("set hold mode %d\n", value);
+			#endif
+			delete[] msg.data;
+			continue;
+		}
 		#ifdef PRINT_COMMANDS
 		printf("got message\n");
 		#endif

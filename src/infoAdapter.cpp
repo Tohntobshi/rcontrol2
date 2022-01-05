@@ -33,10 +33,17 @@ void InfoAdapter::sendSecondaryInfo(
     float yawErrInt,
     float heightErrInt,
 
-    float voltage
+    float voltage,
+
+    float currentPosXError,
+    float currentPosYError,
+    float posXErrorChangeRate,
+    float posYErrorChangeRate,
+    float posXErrorInt,
+    float posYErrorInt
 )
 {
-    uint32_t size = 73;
+    uint32_t size = 97;
 
     uint8_t * data = new uint8_t[size];
     data[0] = (uint8_t)MessageTypes::SECONDARY_INFO;
@@ -59,20 +66,31 @@ void InfoAdapter::sendSecondaryInfo(
     Utils::setFloatToNet(heightErrInt, data + 65);
     Utils::setFloatToNet(voltage, data + 69);
 
+    Utils::setFloatToNet(currentPosXError, data + 73);
+    Utils::setFloatToNet(currentPosYError, data + 77);
+    Utils::setFloatToNet(posXErrorChangeRate, data + 81);
+    Utils::setFloatToNet(posYErrorChangeRate, data + 85);
+    Utils::setFloatToNet(posXErrorInt, data + 89);
+    Utils::setFloatToNet(posYErrorInt, data + 93);
+
     connection->enqueueToSend({ .data = data, .size = size, .ignoreWithoutConnection = true });
 }
 
 void InfoAdapter::sendPrimaryInfo(
     uint8_t landingFlag,
-    float voltage
+    float voltage,
+    uint8_t positionValidity,
+    int32_t satelitesAmount
 )
 {
-    uint32_t size = 6;
+    uint32_t size = 11;
 
     uint8_t * data = new uint8_t[size];
     data[0] = (uint8_t)MessageTypes::PRIMARY_INFO;
     data[1] = landingFlag;
     Utils::setFloatToNet(voltage, data + 2);
+    data[6] = positionValidity;
+    Utils::setIntToNet(satelitesAmount, data + 7);
 
     connection->enqueueToSend({ .data = data, .size = size, .ignoreWithoutConnection = true });
 }

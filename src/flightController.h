@@ -99,4 +99,17 @@ public:
 	void setPowerLossCurveB(float val);
 
 	void setHeightNegativeIntCoef(float val);
+
+	void setPositionPropCoef(float val);
+	void setPositionDerCoef(float val);
+	void setPositionIntCoef(float val);
+	void setPositionIntLimit(float val);
+	void setBarHeightPropCoef(float val);
+	void setBarHeightDerCoef(float val);
+	void setBarHeightIntCoef(float val);
+	void setBarHeightFiltering(float val);
+	void setBarHeightDerFiltering(float val);
+	void setPositionFiltering(float val);
+	void setPositionDerFiltering(float val);
+	void setHoldMode(int val);
 };

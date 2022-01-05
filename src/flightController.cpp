@@ -181,6 +181,8 @@ void FlightController::startSendingSecondaryInfo()
 			if (!readBytes((uint8_t)FlightControllerRegisters::GET_YAW_AND_HEIGHT_INFO, yawAndHeightInfo, 24)) continue;
 			uint8_t motorValsAndFreq[16];
 			if (!readBytes((uint8_t)FlightControllerRegisters::GET_MOTOR_VALS_FREQ_AND_VOLTAGE, motorValsAndFreq, 16)) continue;
+			uint8_t positionInfo[24];
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_POSITION_INFO, positionInfo, 24)) continue;
 
 			float currentPitchError = Utils::getFloatFromNet(pitchAndRollInfo);
 			float pitchErrorChangeRate = Utils::getFloatFromNet(pitchAndRollInfo + 4);
@@ -203,6 +205,13 @@ void FlightController::startSendingSecondaryInfo()
 			float freq = Utils::getFloatFromNet(motorValsAndFreq + 8);
 			float voltage = Utils::getFloatFromNet(motorValsAndFreq + 12);
 
+			float currentPosXError = Utils::getFloatFromNet(positionInfo);
+			float currentPosYError = Utils::getFloatFromNet(positionInfo + 4);
+			float posXErrorChangeRate = Utils::getFloatFromNet(positionInfo + 8);
+			float posYErrorChangeRate = Utils::getFloatFromNet(positionInfo + 12);
+			float posXErrorInt = Utils::getFloatFromNet(positionInfo + 16);
+			float posYErrorInt = Utils::getFloatFromNet(positionInfo + 20);
+
 			infoAdapter->sendSecondaryInfo(
 				currentPitchError,
 				currentRollError,
@@ -221,7 +230,13 @@ void FlightController::startSendingSecondaryInfo()
 				rollErrInt,
 				yawErrInt,
 				heightErrInt,
-				voltage
+				voltage,
+				currentPosXError,
+				currentPosYError,
+				posXErrorChangeRate,
+				posYErrorChangeRate,
+				posXErrorInt,
+				posYErrorInt
 			);
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 		}
@@ -244,10 +259,12 @@ void FlightController::startSendingPrimaryInfo()
 		while (!shouldStopSendPrimaryInfo && infoAdapter)
 		{
 			uint8_t data[5];
-			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PRIMARY_INFO, data, 5)) continue;
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PRIMARY_INFO, data, 8)) continue;
 			infoAdapter->sendPrimaryInfo(
 				data[0],
-				Utils::getFloatFromNet(data + 1)
+				Utils::getFloatFromNet(data + 1),
+				data[5],
+				Utils::getShortFromNet(data + 6)
 			);
 			std::this_thread::sleep_for(std::chrono::milliseconds(200));
 		}
@@ -628,4 +645,87 @@ void FlightController::setHeightNegativeIntCoef(float value)
 	uint8_t data[4];
 	Utils::setFloatToNet(value, data);
 	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HEIGHT_NEGATIVE_INT_COEF, data, 4)) { }
+}
+
+void FlightController::setPositionPropCoef(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_PROP_COEF, data, 4)) { }
+}
+
+void FlightController::setPositionDerCoef(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_DER_COEF, data, 4)) { }
+}
+
+void FlightController::setPositionIntCoef(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_INT_COEF, data, 4)) { }
+}
+
+void FlightController::setPositionIntLimit(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_I_LIMIT, data, 4)) { }
+}
+
+void FlightController::setBarHeightPropCoef(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_BAR_HEIGHT_PROP_COEF, data, 4)) { }
+}
+
+void FlightController::setBarHeightDerCoef(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_BAR_HEIGHT_DER_COEF, data, 4)) { }
+}
+
+void FlightController::setBarHeightIntCoef(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_BAR_HEIGHT_INT_COEF, data, 4)) { }
+}
+
+void FlightController::setBarHeightFiltering(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_BAR_HEIGHT_FILTERING, data, 4)) { }
+}
+
+void FlightController::setBarHeightDerFiltering(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_BAR_HEIGHT_DER_FILTERING, data, 4)) { }
+}
+
+void FlightController::setPositionFiltering(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_FILTERING, data, 4)) { }
+}
+
+void FlightController::setPositionDerFiltering(float value)
+{
+	uint8_t data[4];
+	Utils::setFloatToNet(value, data);
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_DER_FILTERING, data, 4)) { }
+}
+
+void FlightController::setHoldMode(int value)
+{
+	uint8_t mode = std::min(2, std::max(0, value));
+	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HOLD_MODE, &mode, 1)) { }
 }
