@@ -8,6 +8,9 @@ include_directories(/usr/lib/arm-linux-gnueabihf/dbus-1.0/include)
 include_directories(libs/glm/include)
 include_directories(libs/bmp280/include)
 
+find_package( OpenCV REQUIRED )
+include_directories( ${OpenCV_INCLUDE_DIRS} )
+
 set(
   TARGETS
     src/main.cpp
@@ -28,3 +31,4 @@ target_link_libraries(rcontrol dbus-1)
 target_link_libraries(rcontrol pthread)
 target_link_libraries(rcontrol pigpio)
 target_link_libraries(rcontrol bmp280)
+target_link_libraries(rcontrol ${OpenCV_LIBS})

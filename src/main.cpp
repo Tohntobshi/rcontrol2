@@ -14,6 +14,7 @@ int main()
 	});
 	InfoAdapter infoAdapter(connection);
 	flightController->setInfoAdapter(&infoAdapter);
+	flightController->startPositionControl();
 	ControlsAdapter controlsAdapter(connection, flightController);
 	controlsAdapter.start();
 	connThread.join();

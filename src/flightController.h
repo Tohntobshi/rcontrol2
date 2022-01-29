@@ -21,12 +21,28 @@ private:
 	bool calibratingAcc = false;
 	bool calibratingGyro = false;
 	bool calibratingMag = false;
+	bool positionControlRunning = false;
 
 	std::mutex spiInterfaceMutex;
 	bool readBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
 	bool writeBytes(uint8_t reg, uint8_t *bytes, uint8_t count);
 
 	InfoAdapter * infoAdapter = nullptr;
+
+	float currentMoveCommandX = 0.f;
+	float currentMoveCommandY = 0.f;
+	float positionPropCoef = 0.f;
+	float positionDerCoef = 0.f;
+	float positionIntCoef = 0.f;
+	float positionIntLimit = 0.f;
+	float positionFiltering = 0.f;
+	float positionDerFiltering = 0.f;
+	float positionXErrorOut = 0.f;
+	float positionXErrorDerOut = 0.f;
+	float positionXErrorIntOut = 0.f;
+	float positionYErrorOut = 0.f;
+	float positionYErrorDerOut = 0.f;
+	float positionYErrorIntOut = 0.f;
 public:
 	// not supposed to be called from different threads simultaneously
 	static FlightController * Init();
@@ -69,6 +85,8 @@ public:
 	void setTurnOffInclineAngle(float val);
 	
 	void resetTurnOffTrigger();
+
+	void startPositionControl();
 	
 	void startSendingSecondaryInfo();
 	void stopSendingSecondaryInfo();

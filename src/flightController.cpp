@@ -6,8 +6,17 @@
 #include "utils.h"
 #include <fstream>
 #include "messageTypes.h"
+#include <opencv2/opencv.hpp>
+#include <opencv2/videoio.hpp>
+#include <opencv2/imgcodecs.hpp>
+#include <opencv2/core/core.hpp>
+#include <glm/glm.hpp>
 
 #define AUX_READY_PIN 25
+
+#define IMAGE_WIDTH 320
+#define IMAGE_HEIGHT 240
+#define ROI_OFFSET 50
 
 FlightController * FlightController::instance = nullptr;
 
@@ -181,8 +190,8 @@ void FlightController::startSendingSecondaryInfo()
 			if (!readBytes((uint8_t)FlightControllerRegisters::GET_YAW_AND_HEIGHT_INFO, yawAndHeightInfo, 24)) continue;
 			uint8_t motorValsAndFreq[16];
 			if (!readBytes((uint8_t)FlightControllerRegisters::GET_MOTOR_VALS_FREQ_AND_VOLTAGE, motorValsAndFreq, 16)) continue;
-			uint8_t positionInfo[24];
-			if (!readBytes((uint8_t)FlightControllerRegisters::GET_POSITION_INFO, positionInfo, 24)) continue;
+			// uint8_t positionInfo[24];
+			// if (!readBytes((uint8_t)FlightControllerRegisters::GET_POSITION_INFO, positionInfo, 24)) continue;
 
 			float currentPitchError = Utils::getFloatFromNet(pitchAndRollInfo);
 			float pitchErrorChangeRate = Utils::getFloatFromNet(pitchAndRollInfo + 4);
@@ -205,12 +214,12 @@ void FlightController::startSendingSecondaryInfo()
 			float freq = Utils::getFloatFromNet(motorValsAndFreq + 8);
 			float voltage = Utils::getFloatFromNet(motorValsAndFreq + 12);
 
-			float currentPosXError = Utils::getFloatFromNet(positionInfo);
-			float currentPosYError = Utils::getFloatFromNet(positionInfo + 4);
-			float posXErrorChangeRate = Utils::getFloatFromNet(positionInfo + 8);
-			float posYErrorChangeRate = Utils::getFloatFromNet(positionInfo + 12);
-			float posXErrorInt = Utils::getFloatFromNet(positionInfo + 16);
-			float posYErrorInt = Utils::getFloatFromNet(positionInfo + 20);
+			// float currentPosXError = Utils::getFloatFromNet(positionInfo);
+			// float currentPosYError = Utils::getFloatFromNet(positionInfo + 4);
+			// float posXErrorChangeRate = Utils::getFloatFromNet(positionInfo + 8);
+			// float posYErrorChangeRate = Utils::getFloatFromNet(positionInfo + 12);
+			// float posXErrorInt = Utils::getFloatFromNet(positionInfo + 16);
+			// float posYErrorInt = Utils::getFloatFromNet(positionInfo + 20);
 
 			infoAdapter->sendSecondaryInfo(
 				currentPitchError,
@@ -231,12 +240,12 @@ void FlightController::startSendingSecondaryInfo()
 				yawErrInt,
 				heightErrInt,
 				voltage,
-				currentPosXError,
-				currentPosYError,
-				posXErrorChangeRate,
-				posYErrorChangeRate,
-				posXErrorInt,
-				posYErrorInt
+				positionXErrorOut,
+				positionYErrorOut,
+				positionXErrorDerOut,
+				positionYErrorDerOut,
+				positionXErrorIntOut,
+				positionYErrorIntOut
 			);
 			std::this_thread::sleep_for(std::chrono::milliseconds(50));
 		}
@@ -258,7 +267,7 @@ void FlightController::startSendingPrimaryInfo()
 	std::thread thread([&]() -> void {
 		while (!shouldStopSendPrimaryInfo && infoAdapter)
 		{
-			uint8_t data[5];
+			uint8_t data[8];
 			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PRIMARY_INFO, data, 8)) continue;
 			infoAdapter->sendPrimaryInfo(
 				data[0],
@@ -361,9 +370,146 @@ void FlightController::scheduleCalibrateMag()
 	thread.detach();
 }
 
+void FlightController::startPositionControl()
+{
+	if (positionControlRunning) return;
+	positionControlRunning = true;
+	std::thread thread([&]() -> void {
+		cv::setUseOptimized(true);
+		cv::VideoCapture cap(0);
+		cap.set(cv::CAP_PROP_FRAME_WIDTH, IMAGE_WIDTH);
+		cap.set(cv::CAP_PROP_FRAME_HEIGHT, IMAGE_HEIGHT);
+		if(!cap.isOpened())
+		{
+			std::cout << "cant open video\n";
+			return;
+		}
+		cv::Mat prevRoi(IMAGE_HEIGHT - ROI_OFFSET * 2, IMAGE_WIDTH - ROI_OFFSET * 2, CV_8UC1);
+		cv::Mat image;
+		cv::Mat gray;
+		cv::Mat lap;
+		cv::Mat lapAbs;
+		cv::Mat edges;
+		cv::Mat match;
+		cv::Point coordinates;
+		float movementX = 0.f;
+		float movementY = 0.f;
+		float posXErrInt = 0.f;
+		float posYErrInt = 0.f;
+		float posXErrDer = 0.f;
+		float posYErrDer = 0.f;
+		auto prevTime = std::chrono::system_clock::now();
+		float prevHeight = 0.f;
+		while (true)
+		{
+			if (!cap.read(image)) continue;
+			cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
+			cv::Laplacian(gray, lap, CV_16S, 5);
+			cv::convertScaleAbs(lap, lapAbs);
+			cv::threshold(lapAbs, edges, 150, 255, cv::THRESH_BINARY);
+			// cv::Canny(gray, edges, 50, 200);
+			cv::matchTemplate(edges, prevRoi, match, cv::TM_CCOEFF);
+			double minMatchVal;
+			double maxMatchVal;
+			cv::minMaxLoc(match, &minMatchVal, &maxMatchVal, nullptr, &coordinates);
+			int deltaXPx = ROI_OFFSET - coordinates.x;
+			int deltaYPx = ROI_OFFSET - coordinates.y;
+			
+			cv::Mat roi(edges, cv::Rect(ROI_OFFSET, ROI_OFFSET, IMAGE_WIDTH - ROI_OFFSET * 2, IMAGE_HEIGHT - ROI_OFFSET * 2));
+			roi.copyTo(prevRoi);
+
+			uint8_t heightAndDirectionData[8];
+			while (!readBytes((uint8_t)FlightControllerRegisters::GET_HEIGHT_AND_DIRECTION, heightAndDirectionData, 8)) {}
+			float height = Utils::getFloatFromNet(heightAndDirectionData);
+			float direction = Utils::getFloatFromNet(heightAndDirectionData + 4);
+			
+			float moveX = currentMoveCommandX;
+			float moveY = currentMoveCommandY;
+			float propCoef = positionPropCoef;
+			float derCoef = positionDerCoef;
+			float intCoef = positionIntCoef;
+			float intLimit = positionIntLimit;
+			float filtering = positionFiltering;
+			float derFiltering = positionDerFiltering;
+
+			auto time = std::chrono::system_clock::now();
+			auto ms_elapsed = (time - prevTime).count() / 1000000;
+			prevTime = time;
+
+			if (moveX == 0.f && moveY == 0.f)
+			{
+				// hold position
+				float deltaX = 0.f;
+				float deltaY = 0.f;
+				if (minMatchVal != 0.0 && maxMatchVal != 0.0 && fabs(height - prevHeight) < 0.05) // maybe also ignore if height change or rotation occured
+				{
+					deltaX = (float(-deltaYPx) / float(IMAGE_WIDTH)) * height;
+					deltaY = (float(-deltaXPx) / float(IMAGE_WIDTH)) * height;
+					movementX += deltaX;
+					movementY += deltaY;
+				}
+				// TODO update movement if rotation occured
+				if (height < 0.4)
+				{
+					movementX = 0.f;
+					movementY = 0.f;
+					deltaX = 0.f;
+					deltaY = 0.f;
+					posXErrInt = 0.f;
+					posYErrInt = 0.f;
+					posXErrDer = 0.f;
+					posYErrDer = 0.f;
+				}
+				float posXErr = - movementX;
+				float posYErr = - movementY;
+				posXErrDer = (- deltaX / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posXErrDer * derFiltering;
+				posYErrDer = (- deltaY / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posYErrDer * derFiltering;
+				posXErrInt += (posXErr * (ms_elapsed / 1000.f) * intCoef);
+				posYErrInt += (posYErr * (ms_elapsed / 1000.f) * intCoef);
+				posXErrInt = posXErrInt > intLimit ? intLimit : (posXErrInt < -intLimit ? -intLimit : posXErrInt);
+				posYErrInt = posYErrInt > intLimit ? intLimit : (posYErrInt < -intLimit ? -intLimit : posYErrInt);
+				float xAdjust = posXErr * propCoef + posXErrDer * derCoef + posXErrInt;
+				float yAdjust = posYErr * propCoef + posYErrDer * derCoef + posYErrInt;
+				glm::vec2 moveAdjust({ xAdjust, yAdjust });
+				glm::vec2 clampedMoveAdjust = glm::length(moveAdjust) > 1.f ? glm::normalize(moveAdjust) : moveAdjust;
+				uint8_t data[8];
+				Utils::setFloatToNet(clampedMoveAdjust.x, data);
+				Utils::setFloatToNet(clampedMoveAdjust.y, data + 4);
+				while (!writeBytes((uint8_t)FlightControllerRegisters::MOVE_LOCAL, data, 8)) { }
+				positionXErrorOut = posXErr;
+				positionXErrorDerOut = posXErrDer;
+				positionXErrorIntOut = posXErrInt;
+				positionYErrorOut = posYErr;
+				positionYErrorDerOut = posYErrDer;
+				positionYErrorIntOut = posYErrInt;
+			}
+			else
+			{
+				movementX = 0.f;
+				movementY = 0.f;
+				posXErrInt = 0.f;
+				posYErrInt = 0.f;
+				posXErrDer = 0.f;
+				posYErrDer = 0.f;
+				// write info
+				positionXErrorOut = 0.f;
+				positionXErrorDerOut = 0.f;
+				positionXErrorIntOut = 0.f;
+				positionYErrorOut = 0.f;
+				positionYErrorDerOut = 0.f;
+				positionYErrorIntOut = 0.f;
+			}
+			prevHeight = height;
+		}
+	});
+	thread.detach();
+}
+
 
 void FlightController::move(float x, float y)
 {
+	currentMoveCommandX = x;
+	currentMoveCommandY = y;
 	uint8_t data[8];
 	Utils::setFloatToNet(x, data);
 	Utils::setFloatToNet(y, data + 4);
@@ -649,30 +795,34 @@ void FlightController::setHeightNegativeIntCoef(float value)
 
 void FlightController::setPositionPropCoef(float value)
 {
-	uint8_t data[4];
-	Utils::setFloatToNet(value, data);
-	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_PROP_COEF, data, 4)) { }
+	positionPropCoef = value;
+	// uint8_t data[4];
+	// Utils::setFloatToNet(value, data);
+	// while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_PROP_COEF, data, 4)) { }
 }
 
 void FlightController::setPositionDerCoef(float value)
 {
-	uint8_t data[4];
-	Utils::setFloatToNet(value, data);
-	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_DER_COEF, data, 4)) { }
+	positionDerCoef = value;
+	// uint8_t data[4];
+	// Utils::setFloatToNet(value, data);
+	// while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_DER_COEF, data, 4)) { }
 }
 
 void FlightController::setPositionIntCoef(float value)
 {
-	uint8_t data[4];
-	Utils::setFloatToNet(value, data);
-	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_INT_COEF, data, 4)) { }
+	positionIntCoef = value;
+	// uint8_t data[4];
+	// Utils::setFloatToNet(value, data);
+	// while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_INT_COEF, data, 4)) { }
 }
 
 void FlightController::setPositionIntLimit(float value)
 {
-	uint8_t data[4];
-	Utils::setFloatToNet(value, data);
-	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_I_LIMIT, data, 4)) { }
+	positionIntLimit = value;
+	// uint8_t data[4];
+	// Utils::setFloatToNet(value, data);
+	// while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_I_LIMIT, data, 4)) { }
 }
 
 void FlightController::setBarHeightPropCoef(float value)
@@ -712,16 +862,18 @@ void FlightController::setBarHeightDerFiltering(float value)
 
 void FlightController::setPositionFiltering(float value)
 {
-	uint8_t data[4];
-	Utils::setFloatToNet(value, data);
-	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_FILTERING, data, 4)) { }
+	positionFiltering = value;
+	// uint8_t data[4];
+	// Utils::setFloatToNet(value, data);
+	// while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_FILTERING, data, 4)) { }
 }
 
 void FlightController::setPositionDerFiltering(float value)
 {
-	uint8_t data[4];
-	Utils::setFloatToNet(value, data);
-	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_DER_FILTERING, data, 4)) { }
+	positionDerFiltering = value;
+	// uint8_t data[4];
+	// Utils::setFloatToNet(value, data);
+	// while (!writeBytes((uint8_t)FlightControllerRegisters::SET_POSITION_DER_FILTERING, data, 4)) { }
 }
 
 void FlightController::setHoldMode(int value)
