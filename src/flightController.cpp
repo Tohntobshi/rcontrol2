@@ -11,6 +11,7 @@
 #include <opencv2/imgcodecs.hpp>
 #include <opencv2/core/core.hpp>
 #include <glm/glm.hpp>
+#include <iomanip>
 
 #define AUX_READY_PIN 25
 
@@ -400,6 +401,7 @@ void FlightController::startPositionControl()
 		float posYErrDer = 0.f;
 		auto prevTime = std::chrono::system_clock::now();
 		float prevHeight = 0.f;
+		float prevDirection = 0.f;
 		while (true)
 		{
 			if (!cap.read(image)) continue;
@@ -431,75 +433,86 @@ void FlightController::startPositionControl()
 			float intLimit = positionIntLimit;
 			float filtering = positionFiltering;
 			float derFiltering = positionDerFiltering;
+			int holdMode = positionHoldMode;
 
 			auto time = std::chrono::system_clock::now();
 			auto ms_elapsed = (time - prevTime).count() / 1000000;
+			float deltaHeight = height - prevHeight;
+			float deltaDirection = direction - prevDirection;
 			prevTime = time;
+			prevHeight = height;
+			prevDirection = direction;
 
-			if (moveX == 0.f && moveY == 0.f)
+			if (needSamplePositionCamera)
 			{
-				// hold position
-				float deltaX = 0.f;
-				float deltaY = 0.f;
-				if (minMatchVal != 0.0 && maxMatchVal != 0.0 && fabs(height - prevHeight) < 0.05) // maybe also ignore if height change or rotation occured
-				{
-					deltaX = (float(-deltaYPx) / float(IMAGE_WIDTH)) * height;
-					deltaY = (float(-deltaXPx) / float(IMAGE_WIDTH)) * height;
-					movementX += deltaX;
-					movementY += deltaY;
-				}
-				// TODO update movement if rotation occured
-				if (height < 0.4)
-				{
-					movementX = 0.f;
-					movementY = 0.f;
-					deltaX = 0.f;
-					deltaY = 0.f;
-					posXErrInt = 0.f;
-					posYErrInt = 0.f;
-					posXErrDer = 0.f;
-					posYErrDer = 0.f;
-				}
-				float posXErr = - movementX;
-				float posYErr = - movementY;
-				posXErrDer = (- deltaX / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posXErrDer * derFiltering;
-				posYErrDer = (- deltaY / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posYErrDer * derFiltering;
-				posXErrInt += (posXErr * (ms_elapsed / 1000.f) * intCoef);
-				posYErrInt += (posYErr * (ms_elapsed / 1000.f) * intCoef);
-				posXErrInt = posXErrInt > intLimit ? intLimit : (posXErrInt < -intLimit ? -intLimit : posXErrInt);
-				posYErrInt = posYErrInt > intLimit ? intLimit : (posYErrInt < -intLimit ? -intLimit : posYErrInt);
-				float xAdjust = posXErr * propCoef + posXErrDer * derCoef + posXErrInt;
-				float yAdjust = posYErr * propCoef + posYErrDer * derCoef + posYErrInt;
-				glm::vec2 moveAdjust({ xAdjust, yAdjust });
-				glm::vec2 clampedMoveAdjust = glm::length(moveAdjust) > 1.f ? glm::normalize(moveAdjust) : moveAdjust;
-				uint8_t data[8];
-				Utils::setFloatToNet(clampedMoveAdjust.x, data);
-				Utils::setFloatToNet(clampedMoveAdjust.y, data + 4);
-				while (!writeBytes((uint8_t)FlightControllerRegisters::MOVE_LOCAL, data, 8)) { }
-				positionXErrorOut = posXErr;
-				positionXErrorDerOut = posXErrDer;
-				positionXErrorIntOut = posXErrInt;
-				positionYErrorOut = posYErr;
-				positionYErrorDerOut = posYErrDer;
-				positionYErrorIntOut = posYErrInt;
+				std::vector<int> compressionParams;
+				compressionParams.push_back(cv::IMWRITE_PNG_COMPRESSION);
+				compressionParams.push_back(9);
+				auto in_time_t = std::chrono::system_clock::to_time_t(time);
+				std::stringstream fileName;
+    			fileName << "sample " << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << ".png";
+				cv::imwrite(fileName.str(), image, compressionParams);
+				needSamplePositionCamera = false;
 			}
-			else
+
+			float deltaXLocal = 0.f;
+			float deltaYLocal = 0.f;
+			if (minMatchVal != 0.0 && maxMatchVal != 0.0 && fabs(deltaHeight) < 0.05 && fabs(deltaDirection) < 10.f)
+			{
+				deltaXLocal = (float(-deltaYPx) / float(IMAGE_WIDTH)) * height;
+				deltaYLocal = (float(-deltaXPx) / float(IMAGE_WIDTH)) * height;
+			}
+			float deltaXGlobal = deltaXLocal * cos(glm::radians(direction)) - deltaYLocal * sin(glm::radians(direction));
+			float deltaYGlobal = deltaXLocal * sin(glm::radians(direction)) + deltaYLocal * cos(glm::radians(direction));
+
+			movementX += deltaXGlobal;
+			movementY += deltaYGlobal;
+			// dont control position on low height or when hold mode is off
+			if (height < 0.3 || holdMode == 0)
 			{
 				movementX = 0.f;
 				movementY = 0.f;
+				deltaXGlobal = 0.f;
+				deltaYGlobal = 0.f;
 				posXErrInt = 0.f;
 				posYErrInt = 0.f;
 				posXErrDer = 0.f;
 				posYErrDer = 0.f;
-				// write info
-				positionXErrorOut = 0.f;
-				positionXErrorDerOut = 0.f;
-				positionXErrorIntOut = 0.f;
-				positionYErrorOut = 0.f;
-				positionYErrorDerOut = 0.f;
-				positionYErrorIntOut = 0.f;
 			}
-			prevHeight = height;
+			if (moveX != 0.f || moveY != 0.f)
+			{
+				movementX = - moveX * 5.f;
+				movementY = - moveY * 5.f;
+				deltaXGlobal = 0.f;
+				deltaYGlobal = 0.f;
+				posXErrDer = 0.f;
+				posYErrDer = 0.f;
+				posXErrInt = 0.f;
+				posYErrInt = 0.f;
+			}
+			float posXErr = - movementX;
+			float posYErr = - movementY;
+			posXErrDer = (- deltaXGlobal / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posXErrDer * derFiltering;
+			posYErrDer = (- deltaYGlobal / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posYErrDer * derFiltering;
+			posXErrInt += (posXErr * (ms_elapsed / 1000.f) * intCoef);
+			posYErrInt += (posYErr * (ms_elapsed / 1000.f) * intCoef);
+			posXErrInt = posXErrInt > intLimit ? intLimit : (posXErrInt < -intLimit ? -intLimit : posXErrInt);
+			posYErrInt = posYErrInt > intLimit ? intLimit : (posYErrInt < -intLimit ? -intLimit : posYErrInt);
+			float xAdjust = posXErr * propCoef + posXErrDer * derCoef + posXErrInt;
+			float yAdjust = posYErr * propCoef + posYErrDer * derCoef + posYErrInt;
+			glm::vec2 moveAdjust({ xAdjust, yAdjust });
+			glm::vec2 clampedMoveAdjust = glm::length(moveAdjust) > 1.f ? glm::normalize(moveAdjust) : moveAdjust;
+			uint8_t data[8];
+			Utils::setFloatToNet(clampedMoveAdjust.x, data);
+			Utils::setFloatToNet(clampedMoveAdjust.y, data + 4);
+			while (!writeBytes((uint8_t)FlightControllerRegisters::MOVE, data, 8)) { }
+			positionXErrorOut = posXErr;
+			positionXErrorDerOut = posXErrDer;
+			positionXErrorIntOut = posXErrInt;
+			positionYErrorOut = posYErr;
+			positionYErrorDerOut = posYErrDer;
+			positionYErrorIntOut = posYErrInt;
+			
 		}
 	});
 	thread.detach();
@@ -510,10 +523,10 @@ void FlightController::move(float x, float y)
 {
 	currentMoveCommandX = x;
 	currentMoveCommandY = y;
-	uint8_t data[8];
-	Utils::setFloatToNet(x, data);
-	Utils::setFloatToNet(y, data + 4);
-	while (!writeBytes((uint8_t)FlightControllerRegisters::MOVE, data, 8)) { }
+	// uint8_t data[8];
+	// Utils::setFloatToNet(x, data);
+	// Utils::setFloatToNet(y, data + 4);
+	// while (!writeBytes((uint8_t)FlightControllerRegisters::MOVE, data, 8)) { }
 }
 
 void FlightController::setPitchPropCoef(float value)
@@ -878,6 +891,12 @@ void FlightController::setPositionDerFiltering(float value)
 
 void FlightController::setHoldMode(int value)
 {
-	uint8_t mode = std::min(2, std::max(0, value));
-	while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HOLD_MODE, &mode, 1)) { }
+	positionHoldMode = value;
+	// uint8_t mode = std::min(2, std::max(0, value));
+	// while (!writeBytes((uint8_t)FlightControllerRegisters::SET_HOLD_MODE, &mode, 1)) { }
+}
+
+void FlightController::schedulePositionCameraShot()
+{
+	needSamplePositionCamera = true;
 }

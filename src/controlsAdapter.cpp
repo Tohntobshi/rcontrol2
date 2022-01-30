@@ -568,6 +568,14 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == (uint8_t)Controls::TAKE_POSITION_CAMERA_SHOT && msg.size == 2) {
+			flightController->schedulePositionCameraShot();
+			#ifdef PRINT_COMMANDS
+			printf("schedule position cam shot\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
 		#ifdef PRINT_COMMANDS
 		printf("got message\n");
 		#endif

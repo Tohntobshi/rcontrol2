@@ -43,6 +43,8 @@ private:
 	float positionYErrorOut = 0.f;
 	float positionYErrorDerOut = 0.f;
 	float positionYErrorIntOut = 0.f;
+	int positionHoldMode = 1;
+	bool needSamplePositionCamera = false;
 public:
 	// not supposed to be called from different threads simultaneously
 	static FlightController * Init();
@@ -130,4 +132,5 @@ public:
 	void setPositionFiltering(float val);
 	void setPositionDerFiltering(float val);
 	void setHoldMode(int val);
+	void schedulePositionCameraShot();
 };

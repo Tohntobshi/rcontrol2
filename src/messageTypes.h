@@ -87,7 +87,8 @@ enum class Controls : uint8_t
     SET_BAR_HEIGHT_DER_FILTERING,
     SET_POSITION_FILTERING,
     SET_POSITION_DER_FILTERING,
-    SET_HOLD_MODE
+    SET_HOLD_MODE,
+    TAKE_POSITION_CAMERA_SHOT
 };
 
 enum class FlightControllerRegisters : uint8_t
