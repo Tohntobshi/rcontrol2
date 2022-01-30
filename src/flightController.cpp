@@ -177,6 +177,94 @@ void FlightController::setInfoAdapter(InfoAdapter * adapter)
 	infoAdapter = adapter;
 }
 
+void FlightController::fetchControllerInfoIfOld()
+{
+	std::unique_lock<std::mutex> lck(fetchInfoMutex);
+	auto time = std::chrono::system_clock::now();
+	if ((time - fetchTimestamp).count() < 33000000) return;
+	fetchTimestamp = time;
+	uint8_t pitchAndRollInfo[24];
+	while (!readBytes((uint8_t)FlightControllerRegisters::GET_PITCH_AND_ROLL_INFO, pitchAndRollInfo, 24)) {}
+	uint8_t yawAndHeightInfo[24];
+	while (!readBytes((uint8_t)FlightControllerRegisters::GET_YAW_AND_HEIGHT_INFO, yawAndHeightInfo, 24)) {}
+	uint8_t motorValsAndFreq[16];
+	while (!readBytes((uint8_t)FlightControllerRegisters::GET_MOTOR_VALS_FREQ_AND_VOLTAGE, motorValsAndFreq, 16)) {}
+
+	currentPitchErrorOut = Utils::getFloatFromNet(pitchAndRollInfo);
+	pitchErrorChangeRateOut = Utils::getFloatFromNet(pitchAndRollInfo + 4);
+	pitchErrIntOut = Utils::getFloatFromNet(pitchAndRollInfo + 8);
+	currentRollErrorOut = Utils::getFloatFromNet(pitchAndRollInfo + 12);
+	rollErrorChangeRateOut = Utils::getFloatFromNet(pitchAndRollInfo + 16);
+	rollErrIntOut = Utils::getFloatFromNet(pitchAndRollInfo + 20);
+
+	currentYawErrorOut = Utils::getFloatFromNet(yawAndHeightInfo);
+	yawErrorChangeRateOut = Utils::getFloatFromNet(yawAndHeightInfo + 4);
+	yawErrIntOut = Utils::getFloatFromNet(yawAndHeightInfo + 8);
+	currentHeightErrorOut = Utils::getFloatFromNet(yawAndHeightInfo + 12);
+	heightErrorChangeRateOut = Utils::getFloatFromNet(yawAndHeightInfo + 16);
+	heightErrIntOut = Utils::getFloatFromNet(yawAndHeightInfo + 20);
+
+	frontLeftOut = Utils::getShortFromNet(motorValsAndFreq);
+	frontRightOut = Utils::getShortFromNet(motorValsAndFreq + 2);
+	backLeftOut = Utils::getShortFromNet(motorValsAndFreq + 4);
+	backRightOut = Utils::getShortFromNet(motorValsAndFreq + 6);
+	freqOut = Utils::getFloatFromNet(motorValsAndFreq + 8);
+	voltageOut = Utils::getFloatFromNet(motorValsAndFreq + 12);
+}
+
+void FlightController::startDataRecording()
+{
+	if (writeSecondaryInfo) return;
+	writeSecondaryInfo = true;
+	shouldStopWritingSecondaryInfo = false;
+	std::thread thread([&]() -> void {
+		auto time = std::chrono::system_clock::now();
+		auto in_time_t = std::chrono::system_clock::to_time_t(time);
+		std::stringstream fileName;
+    	fileName << "session info " << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << ".csv";
+		std::ofstream file(fileName.str());
+		while (!shouldStopWritingSecondaryInfo)
+		{
+			auto time = std::chrono::system_clock::now();
+			fetchControllerInfoIfOld();
+			file << (time.time_since_epoch().count() / 1000000) << ","
+				<< currentPitchErrorOut << ","
+				<< currentRollErrorOut << ","
+				<< pitchErrorChangeRateOut << ","
+				<< rollErrorChangeRateOut << ","
+				<< currentHeightErrorOut << ","
+				<< heightErrorChangeRateOut << ","
+				<< currentYawErrorOut << ","
+				<< yawErrorChangeRateOut << ","
+				<< frontLeftOut << ","
+				<< frontRightOut << ","
+				<< backLeftOut << ","
+				<< backRightOut << ","
+				<< freqOut << ","
+				<< pitchErrIntOut << ","
+				<< rollErrIntOut << ","
+				<< yawErrIntOut << ","
+				<< heightErrIntOut << ","
+				<< voltageOut << ","
+				<< positionXErrorOut << ","
+				<< positionYErrorOut << ","
+				<< positionXErrorDerOut << ","
+				<< positionYErrorDerOut << ","
+				<< positionXErrorIntOut << ","
+				<< positionYErrorIntOut << "\n";
+			std::this_thread::sleep_for(std::chrono::milliseconds(33));
+		}
+		file.close();
+		writeSecondaryInfo = false;
+	});
+	thread.detach();
+}
+
+void FlightController::stopDataRecording()
+{
+	shouldStopWritingSecondaryInfo = true;
+}
+
 void FlightController::startSendingSecondaryInfo()
 {
 	if (sendSecondaryInfo) return;
@@ -185,62 +273,26 @@ void FlightController::startSendingSecondaryInfo()
 	std::thread thread([&]() -> void {
 		while (!shouldStopSendSecondaryInfo && infoAdapter)
 		{
-			uint8_t pitchAndRollInfo[24];
-			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PITCH_AND_ROLL_INFO, pitchAndRollInfo, 24)) continue;
-			uint8_t yawAndHeightInfo[24];
-			if (!readBytes((uint8_t)FlightControllerRegisters::GET_YAW_AND_HEIGHT_INFO, yawAndHeightInfo, 24)) continue;
-			uint8_t motorValsAndFreq[16];
-			if (!readBytes((uint8_t)FlightControllerRegisters::GET_MOTOR_VALS_FREQ_AND_VOLTAGE, motorValsAndFreq, 16)) continue;
-			// uint8_t positionInfo[24];
-			// if (!readBytes((uint8_t)FlightControllerRegisters::GET_POSITION_INFO, positionInfo, 24)) continue;
-
-			float currentPitchError = Utils::getFloatFromNet(pitchAndRollInfo);
-			float pitchErrorChangeRate = Utils::getFloatFromNet(pitchAndRollInfo + 4);
-			float pitchErrInt = Utils::getFloatFromNet(pitchAndRollInfo + 8);
-			float currentRollError = Utils::getFloatFromNet(pitchAndRollInfo + 12);
-			float rollErrorChangeRate = Utils::getFloatFromNet(pitchAndRollInfo + 16);
-			float rollErrInt = Utils::getFloatFromNet(pitchAndRollInfo + 20);
-
-			float currentYawError = Utils::getFloatFromNet(yawAndHeightInfo);
-			float yawErrorChangeRate = Utils::getFloatFromNet(yawAndHeightInfo + 4);
-			float yawErrInt = Utils::getFloatFromNet(yawAndHeightInfo + 8);
-			float currentHeightError = Utils::getFloatFromNet(yawAndHeightInfo + 12);
-			float heightErrorChangeRate = Utils::getFloatFromNet(yawAndHeightInfo + 16);
-			float heightErrInt = Utils::getFloatFromNet(yawAndHeightInfo + 20);
-
-			uint16_t frontLeft = Utils::getShortFromNet(motorValsAndFreq);
-			uint16_t frontRight = Utils::getShortFromNet(motorValsAndFreq + 2);
-			uint16_t backLeft = Utils::getShortFromNet(motorValsAndFreq + 4);
-			uint16_t backRight = Utils::getShortFromNet(motorValsAndFreq + 6);
-			float freq = Utils::getFloatFromNet(motorValsAndFreq + 8);
-			float voltage = Utils::getFloatFromNet(motorValsAndFreq + 12);
-
-			// float currentPosXError = Utils::getFloatFromNet(positionInfo);
-			// float currentPosYError = Utils::getFloatFromNet(positionInfo + 4);
-			// float posXErrorChangeRate = Utils::getFloatFromNet(positionInfo + 8);
-			// float posYErrorChangeRate = Utils::getFloatFromNet(positionInfo + 12);
-			// float posXErrorInt = Utils::getFloatFromNet(positionInfo + 16);
-			// float posYErrorInt = Utils::getFloatFromNet(positionInfo + 20);
-
+			fetchControllerInfoIfOld();
 			infoAdapter->sendSecondaryInfo(
-				currentPitchError,
-				currentRollError,
-				pitchErrorChangeRate,
-				rollErrorChangeRate,
-				currentHeightError,
-				heightErrorChangeRate,
-				currentYawError,
-				yawErrorChangeRate,
-				frontLeft,
-				frontRight,
-				backLeft,
-				backRight,
-				freq,
-				pitchErrInt,
-				rollErrInt,
-				yawErrInt,
-				heightErrInt,
-				voltage,
+				currentPitchErrorOut,
+				currentRollErrorOut,
+				pitchErrorChangeRateOut,
+				rollErrorChangeRateOut,
+				currentHeightErrorOut,
+				heightErrorChangeRateOut,
+				currentYawErrorOut,
+				yawErrorChangeRateOut,
+				frontLeftOut,
+				frontRightOut,
+				backLeftOut,
+				backRightOut,
+				freqOut,
+				pitchErrIntOut,
+				rollErrIntOut,
+				yawErrIntOut,
+				heightErrIntOut,
+				voltageOut,
 				positionXErrorOut,
 				positionYErrorOut,
 				positionXErrorDerOut,
@@ -269,7 +321,7 @@ void FlightController::startSendingPrimaryInfo()
 		while (!shouldStopSendPrimaryInfo && infoAdapter)
 		{
 			uint8_t data[8];
-			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PRIMARY_INFO, data, 8)) continue;
+			if (!readBytes((uint8_t)FlightControllerRegisters::GET_PRIMARY_INFO, data, 8)) continue; // TODO remove position info
 			infoAdapter->sendPrimaryInfo(
 				data[0],
 				Utils::getFloatFromNet(data + 1),
@@ -481,8 +533,8 @@ void FlightController::startPositionControl()
 			}
 			if (moveX != 0.f || moveY != 0.f)
 			{
-				movementX = - moveX * 5.f;
-				movementY = - moveY * 5.f;
+				movementX = - moveX;
+				movementY = - moveY;
 				deltaXGlobal = 0.f;
 				deltaYGlobal = 0.f;
 				posXErrDer = 0.f;

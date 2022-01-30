@@ -576,6 +576,22 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == (uint8_t)Controls::START_DATA_RECORDING && msg.size == 2) {
+			flightController->startDataRecording();
+			#ifdef PRINT_COMMANDS
+			printf("start data recording\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::STOP_DATA_RECORDING && msg.size == 2) {
+			flightController->stopDataRecording();
+			#ifdef PRINT_COMMANDS
+			printf("stop data recording\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
 		#ifdef PRINT_COMMANDS
 		printf("got message\n");
 		#endif

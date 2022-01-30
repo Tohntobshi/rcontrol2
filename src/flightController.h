@@ -16,8 +16,13 @@ private:
 
 	bool sendSecondaryInfo = false;
 	bool shouldStopSendSecondaryInfo = false;
+
 	bool sendPrimaryInfo = false;
 	bool shouldStopSendPrimaryInfo = false;
+
+	bool writeSecondaryInfo = false;
+	bool shouldStopWritingSecondaryInfo = false;
+
 	bool calibratingAcc = false;
 	bool calibratingGyro = false;
 	bool calibratingMag = false;
@@ -37,12 +42,37 @@ private:
 	float positionIntLimit = 0.f;
 	float positionFiltering = 0.f;
 	float positionDerFiltering = 0.f;
+
 	float positionXErrorOut = 0.f;
 	float positionXErrorDerOut = 0.f;
 	float positionXErrorIntOut = 0.f;
 	float positionYErrorOut = 0.f;
 	float positionYErrorDerOut = 0.f;
 	float positionYErrorIntOut = 0.f;
+
+	// info from flight controller
+	std::mutex fetchInfoMutex;
+	std::chrono::time_point<std::chrono::system_clock> fetchTimestamp;
+	void fetchControllerInfoIfOld();
+	float currentPitchErrorOut = 0.f;
+	float pitchErrorChangeRateOut = 0.f;
+	float pitchErrIntOut = 0.f;
+	float currentRollErrorOut = 0.f;
+	float rollErrorChangeRateOut = 0.f;
+	float rollErrIntOut = 0.f;
+	float currentYawErrorOut = 0.f;
+	float yawErrorChangeRateOut = 0.f;
+	float yawErrIntOut = 0.f;
+	float currentHeightErrorOut = 0.f;
+	float heightErrorChangeRateOut = 0.f;
+	float heightErrIntOut = 0.f;
+	uint16_t frontLeftOut = 0;
+	uint16_t frontRightOut = 0;
+	uint16_t backLeftOut = 0;
+	uint16_t backRightOut = 0;
+	float freqOut = 0.f; 
+	float voltageOut = 0.f; 
+
 	int positionHoldMode = 1;
 	bool needSamplePositionCamera = false;
 public:
@@ -133,4 +163,6 @@ public:
 	void setPositionDerFiltering(float val);
 	void setHoldMode(int val);
 	void schedulePositionCameraShot();
+	void startDataRecording();
+	void stopDataRecording();
 };
