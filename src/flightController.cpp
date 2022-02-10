@@ -221,7 +221,7 @@ void FlightController::startDataRecording()
 		auto time = std::chrono::system_clock::now();
 		auto in_time_t = std::chrono::system_clock::to_time_t(time);
 		std::stringstream fileName;
-    	fileName << "session info " << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << ".csv";
+    	fileName << "/home/pi/session info " << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
 		std::ofstream file(fileName.str());
 		while (!shouldStopWritingSecondaryInfo)
 		{
@@ -502,7 +502,7 @@ void FlightController::startPositionControl()
 				compressionParams.push_back(9);
 				auto in_time_t = std::chrono::system_clock::to_time_t(time);
 				std::stringstream fileName;
-    			fileName << "sample " << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << ".png";
+    			fileName << "/home/pi/sample " << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << ".png";
 				cv::imwrite(fileName.str(), image, compressionParams);
 				needSamplePositionCamera = false;
 			}
