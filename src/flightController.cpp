@@ -17,7 +17,10 @@
 
 #define IMAGE_WIDTH 320
 #define IMAGE_HEIGHT 240
-#define ROI_OFFSET 50
+#define TRACK_WINDOW_WIDHT 60
+#define TRACK_WINDOW_HEIGHT 60
+#define TRACK_WINDOW_INIT_X 130
+#define TRACK_WINDOW_INIT_Y 90
 
 FlightController * FlightController::instance = nullptr;
 
@@ -39,6 +42,7 @@ void FlightController::Destroy()
 
 FlightController::FlightController()
 {
+	std::cout << "init flight controller\n";
 	if (gpioInitialise() < 0)
 	{
 		std::cout << "cant init gpio\n";
@@ -51,9 +55,11 @@ FlightController::FlightController()
 	}
 	gpioSetMode(AUX_READY_PIN, PI_INPUT);
 	gpioSetPullUpDown(AUX_READY_PIN, PI_PUD_DOWN);
+	std::cout << "restoring calibration...\n";
 	restorePrevAccCalibration();
 	restorePrevGyroCalibration();
 	restorePrevMagCalibration();
+	std::cout << "restored\n";
 }
 
 FlightController::~FlightController()
@@ -221,7 +227,7 @@ void FlightController::startDataRecording()
 		auto time = std::chrono::system_clock::now();
 		auto in_time_t = std::chrono::system_clock::to_time_t(time);
 		std::stringstream fileName;
-    	fileName << "/home/pi/session info " << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
+    	fileName << "/home/pi/session_info_" << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d_%H:%M:%S");
 		std::ofstream file(fileName.str());
 		while (!shouldStopWritingSecondaryInfo)
 		{
@@ -427,26 +433,39 @@ void FlightController::startPositionControl()
 {
 	if (positionControlRunning) return;
 	positionControlRunning = true;
+	std::cout << "start position control\n";
 	std::thread thread([&]() -> void {
+		int markh1;
+		int marks1;
+		int markv1;
+		int markh2;
+		int marks2;
+		int markv2;
+		float exposure;
+		std::ifstream file;
+		file.open("/home/pi/markcolorrange");
+		if (file.is_open()) {
+			std::string line;
+			std::getline(file, line);
+			file.close();
+			sscanf(line.c_str(), "%d,%d,%d,%d,%d,%d,%f", &markh1, &marks1, &markv1, &markh2, &marks2, &markv2, &exposure);
+		}
+		
 		cv::setUseOptimized(true);
 		cv::VideoCapture cap(0);
 		cap.set(cv::CAP_PROP_FRAME_WIDTH, IMAGE_WIDTH);
 		cap.set(cv::CAP_PROP_FRAME_HEIGHT, IMAGE_HEIGHT);
+		cap.set(cv::CAP_PROP_AUTO_EXPOSURE, 0.25);
+		cap.set(cv::CAP_PROP_EXPOSURE, exposure);
+		cap.set(cv::CAP_PROP_FPS, 90.0);
 		if(!cap.isOpened())
 		{
 			std::cout << "cant open video\n";
 			return;
 		}
-		cv::Mat prevRoi(IMAGE_HEIGHT - ROI_OFFSET * 2, IMAGE_WIDTH - ROI_OFFSET * 2, CV_8UC1);
 		cv::Mat image;
-		cv::Mat gray;
-		cv::Mat lap;
-		cv::Mat lapAbs;
-		cv::Mat edges;
-		cv::Mat match;
-		cv::Point coordinates;
-		float movementX = 0.f;
-		float movementY = 0.f;
+		cv::Mat image_hsv;
+  		cv::Mat mask;
 		float posXErrInt = 0.f;
 		float posYErrInt = 0.f;
 		float posXErrDer = 0.f;
@@ -454,23 +473,14 @@ void FlightController::startPositionControl()
 		auto prevTime = std::chrono::system_clock::now();
 		float prevHeight = 0.f;
 		float prevDirection = 0.f;
+		float prevShiftXGlobal = 0.f;
+		float prevShiftYGlobal = 0.f;
+		cv::Rect track_window(TRACK_WINDOW_INIT_X, TRACK_WINDOW_INIT_Y, TRACK_WINDOW_WIDHT, TRACK_WINDOW_HEIGHT);
+  		cv::TermCriteria term_crit(cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 10, 1);
 		while (true)
 		{
 			if (!cap.read(image)) continue;
-			cv::cvtColor(image, gray, cv::COLOR_BGR2GRAY);
-			cv::Laplacian(gray, lap, CV_16S, 5);
-			cv::convertScaleAbs(lap, lapAbs);
-			cv::threshold(lapAbs, edges, 150, 255, cv::THRESH_BINARY);
-			// cv::Canny(gray, edges, 50, 200);
-			cv::matchTemplate(edges, prevRoi, match, cv::TM_CCOEFF);
-			double minMatchVal;
-			double maxMatchVal;
-			cv::minMaxLoc(match, &minMatchVal, &maxMatchVal, nullptr, &coordinates);
-			int deltaXPx = ROI_OFFSET - coordinates.x;
-			int deltaYPx = ROI_OFFSET - coordinates.y;
 			
-			cv::Mat roi(edges, cv::Rect(ROI_OFFSET, ROI_OFFSET, IMAGE_WIDTH - ROI_OFFSET * 2, IMAGE_HEIGHT - ROI_OFFSET * 2));
-			roi.copyTo(prevRoi);
 
 			uint8_t heightAndDirectionData[8];
 			while (!readBytes((uint8_t)FlightControllerRegisters::GET_HEIGHT_AND_DIRECTION, heightAndDirectionData, 8)) {}
@@ -489,6 +499,7 @@ void FlightController::startPositionControl()
 
 			auto time = std::chrono::system_clock::now();
 			auto ms_elapsed = (time - prevTime).count() / 1000000;
+			// std::cout << ms_elapsed << " ms elapsed\n";
 			float deltaHeight = height - prevHeight;
 			float deltaDirection = direction - prevDirection;
 			prevTime = time;
@@ -502,48 +513,77 @@ void FlightController::startPositionControl()
 				compressionParams.push_back(9);
 				auto in_time_t = std::chrono::system_clock::to_time_t(time);
 				std::stringstream fileName;
-    			fileName << "/home/pi/sample " << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S") << ".png";
+    			fileName << "/home/pi/sample_" << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d_%H:%M:%S") << ".png";
 				cv::imwrite(fileName.str(), image, compressionParams);
 				needSamplePositionCamera = false;
 			}
 
-			float deltaXLocal = 0.f;
-			float deltaYLocal = 0.f;
-			if (minMatchVal != 0.0 && maxMatchVal != 0.0 && fabs(deltaHeight) < 0.05 && fabs(deltaDirection) < 10.f)
-			{
-				deltaXLocal = (float(-deltaYPx) / float(IMAGE_WIDTH)) * height;
-				deltaYLocal = (float(-deltaXPx) / float(IMAGE_WIDTH)) * height;
-			}
-			float deltaXGlobal = deltaXLocal * cos(glm::radians(direction)) - deltaYLocal * sin(glm::radians(direction));
-			float deltaYGlobal = deltaXLocal * sin(glm::radians(direction)) + deltaYLocal * cos(glm::radians(direction));
+			cv::cvtColor(image, image_hsv, cv::COLOR_BGR2HSV);
+			cv::inRange(image_hsv, cv::Scalar(markh1, marks1, markv1), cv::Scalar(markh2, marks2, markv2), mask);
+			cv::meanShift(mask, track_window, term_crit);
 
-			movementX += deltaXGlobal;
-			movementY += deltaYGlobal;
-			// dont control position on low height or when hold mode is off
-			if (height < 0.3 || holdMode == 0)
+			cv::Mat emptyMask;
+			float range_[] = {0, 256};
+    		const float* range[] = {range_};
+			int channels[] = { 0 };
+			int histSize[] = { 2 };
+			cv::Mat trackWindowPxls = mask(track_window);
+			cv::Mat trackWindowPxlsHist;
+			cv::calcHist(&trackWindowPxls, 1, channels, emptyMask, trackWindowPxlsHist, 1, histSize, range);
+			int whitePxls = trackWindowPxlsHist.at<float>(1, 0);
+			if (whitePxls < 20)
 			{
-				movementX = 0.f;
-				movementY = 0.f;
+				track_window.x = TRACK_WINDOW_INIT_X;
+				track_window.y = TRACK_WINDOW_INIT_Y;
+			}
+			// find px
+			int pxShiftXLocal = (IMAGE_WIDTH / 2) - (track_window.x + track_window.width / 2);
+			int pxShiftYLocal = (IMAGE_HEIGHT / 2) - (track_window.y + track_window.height / 2);
+
+			float pixelWidth = (height * 2.4f) / IMAGE_WIDTH;
+			float shiftXLocal = float(-pxShiftYLocal) * pixelWidth;
+			float shiftYLocal = float(-pxShiftXLocal) * pixelWidth;
+
+			float shiftXGlobal = shiftXLocal * cos(glm::radians(direction)) - shiftYLocal * sin(glm::radians(direction));
+			float shiftYGlobal = shiftXLocal * sin(glm::radians(direction)) + shiftYLocal * cos(glm::radians(direction));
+
+			float deltaXGlobal = shiftXGlobal - prevShiftXGlobal;
+			float deltaYGlobal = shiftYGlobal - prevShiftYGlobal;
+			prevShiftXGlobal = shiftXGlobal;
+			prevShiftYGlobal = shiftYGlobal;
+			// dont control position on low height or when hold mode is off
+			if (height < 0.1 || holdMode == 0)
+			{
+				shiftXGlobal = 0.f;
+				shiftYGlobal = 0.f;
 				deltaXGlobal = 0.f;
 				deltaYGlobal = 0.f;
 				posXErrInt = 0.f;
 				posYErrInt = 0.f;
 				posXErrDer = 0.f;
 				posYErrDer = 0.f;
+				prevShiftXGlobal = 0.f;
+				prevShiftYGlobal = 0.f;
+				track_window.x = TRACK_WINDOW_INIT_X;
+				track_window.y = TRACK_WINDOW_INIT_Y;
 			}
 			if (moveX != 0.f || moveY != 0.f)
 			{
-				movementX = - moveX;
-				movementY = - moveY;
+				shiftXGlobal = - moveX;
+				shiftYGlobal = - moveY;
 				deltaXGlobal = 0.f;
 				deltaYGlobal = 0.f;
 				posXErrDer = 0.f;
 				posYErrDer = 0.f;
 				posXErrInt = 0.f;
 				posYErrInt = 0.f;
+				prevShiftXGlobal = 0.f;
+				prevShiftYGlobal = 0.f;
+				track_window.x = TRACK_WINDOW_INIT_X;
+				track_window.y = TRACK_WINDOW_INIT_Y;
 			}
-			float posXErr = - movementX;
-			float posYErr = - movementY;
+			float posXErr = - shiftXGlobal;
+			float posYErr = - shiftYGlobal;
 			posXErrDer = (- deltaXGlobal / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posXErrDer * derFiltering;
 			posYErrDer = (- deltaYGlobal / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posYErrDer * derFiltering;
 			posXErrInt += (posXErr * (ms_elapsed / 1000.f) * intCoef);
