@@ -2,6 +2,9 @@
 #include <stdint.h>
 #include <mutex>
 #include "infoAdapter.h"
+#include <opencv2/opencv.hpp>
+#include <chrono>
+#include <tuple>
 
 class FlightController
 {
@@ -50,6 +53,24 @@ private:
 	float positionYErrorDerOut = 0.f;
 	float positionYErrorIntOut = 0.f;
 
+	cv::VideoCapture videoCap;
+	cv::Mat image;
+	cv::Mat oldImageGray;
+	cv::Mat imageGray;
+	std::vector<cv::Point2f> startCoordinatesFromCenterInMeters;
+	std::vector<cv::Point2f> currentCoordinates;
+	void initCV();
+	void readFrame();
+	void writePositionCameraSampleIfNeeded(std::chrono::system_clock::time_point time);
+	void findPositionHoldTrackingPoints();
+	void updatePositionHoldTrackingPoints();
+	std::tuple<float, float> calculateShiftFromInitialPosition();
+	std::vector<cv::Point2f> convertCoordinatesToMetersFromCenter(const std::vector<cv::Point2f>& pixelCoordinates);
+
+	std::tuple<float, float> getHeightAndDirection();
+	bool needToResetTrackingPoints = true;
+
+
 	// info from flight controller
 	std::mutex fetchInfoMutex;
 	std::chrono::time_point<std::chrono::system_clock> fetchTimestamp;
@@ -71,7 +92,10 @@ private:
 	uint16_t backLeftOut = 0;
 	uint16_t backRightOut = 0;
 	float freqOut = 0.f; 
-	float voltageOut = 0.f; 
+	float voltageOut = 0.f;
+
+	float currentHeight = 0.f;
+	float currentDirection = 0.f;
 
 	int positionHoldMode = 1;
 	bool needSamplePositionCamera = false;

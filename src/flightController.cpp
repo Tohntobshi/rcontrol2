@@ -2,25 +2,16 @@
 #include "flightController.h"
 #include <iostream>
 #include <thread>
-#include <chrono>
 #include "utils.h"
 #include <fstream>
 #include "messageTypes.h"
-#include <opencv2/opencv.hpp>
-#include <opencv2/videoio.hpp>
-#include <opencv2/imgcodecs.hpp>
-#include <opencv2/core/core.hpp>
 #include <glm/glm.hpp>
 #include <iomanip>
 
 #define AUX_READY_PIN 25
 
-#define IMAGE_WIDTH 320
+#define IMAGE_WIDTH 319
 #define IMAGE_HEIGHT 240
-#define TRACK_WINDOW_WIDHT 60
-#define TRACK_WINDOW_HEIGHT 60
-#define TRACK_WINDOW_INIT_X 130
-#define TRACK_WINDOW_INIT_Y 90
 
 FlightController * FlightController::instance = nullptr;
 
@@ -435,37 +426,8 @@ void FlightController::startPositionControl()
 	positionControlRunning = true;
 	std::cout << "start position control\n";
 	std::thread thread([&]() -> void {
-		int markh1;
-		int marks1;
-		int markv1;
-		int markh2;
-		int marks2;
-		int markv2;
-		float exposure;
-		std::ifstream file;
-		file.open("/home/pi/markcolorrange");
-		if (file.is_open()) {
-			std::string line;
-			std::getline(file, line);
-			file.close();
-			sscanf(line.c_str(), "%d,%d,%d,%d,%d,%d,%f", &markh1, &marks1, &markv1, &markh2, &marks2, &markv2, &exposure);
-		}
+		initCV();
 		
-		cv::setUseOptimized(true);
-		cv::VideoCapture cap(0);
-		cap.set(cv::CAP_PROP_FRAME_WIDTH, IMAGE_WIDTH);
-		cap.set(cv::CAP_PROP_FRAME_HEIGHT, IMAGE_HEIGHT);
-		cap.set(cv::CAP_PROP_AUTO_EXPOSURE, 0.25);
-		cap.set(cv::CAP_PROP_EXPOSURE, exposure);
-		cap.set(cv::CAP_PROP_FPS, 90.0);
-		if(!cap.isOpened())
-		{
-			std::cout << "cant open video\n";
-			return;
-		}
-		cv::Mat image;
-		cv::Mat image_hsv;
-  		cv::Mat mask;
 		float posXErrInt = 0.f;
 		float posYErrInt = 0.f;
 		float posXErrDer = 0.f;
@@ -475,17 +437,12 @@ void FlightController::startPositionControl()
 		float prevDirection = 0.f;
 		float prevShiftXGlobal = 0.f;
 		float prevShiftYGlobal = 0.f;
-		cv::Rect track_window(TRACK_WINDOW_INIT_X, TRACK_WINDOW_INIT_Y, TRACK_WINDOW_WIDHT, TRACK_WINDOW_HEIGHT);
-  		cv::TermCriteria term_crit(cv::TermCriteria::EPS | cv::TermCriteria::COUNT, 10, 1);
 		while (true)
 		{
-			if (!cap.read(image)) continue;
-			
-
-			uint8_t heightAndDirectionData[8];
-			while (!readBytes((uint8_t)FlightControllerRegisters::GET_HEIGHT_AND_DIRECTION, heightAndDirectionData, 8)) {}
-			float height = Utils::getFloatFromNet(heightAndDirectionData);
-			float direction = Utils::getFloatFromNet(heightAndDirectionData + 4);
+			readFrame();
+			auto [height, direction] = getHeightAndDirection();
+			currentHeight = height;
+			currentDirection = direction;
 			
 			float moveX = currentMoveCommandX;
 			float moveY = currentMoveCommandY;
@@ -500,59 +457,30 @@ void FlightController::startPositionControl()
 			auto time = std::chrono::system_clock::now();
 			auto ms_elapsed = (time - prevTime).count() / 1000000;
 			// std::cout << ms_elapsed << " ms elapsed\n";
-			float deltaHeight = height - prevHeight;
-			float deltaDirection = direction - prevDirection;
+			float deltaHeight = currentHeight - prevHeight;
+			float deltaDirection = currentDirection - prevDirection;
 			prevTime = time;
-			prevHeight = height;
-			prevDirection = direction;
+			prevHeight = currentHeight;
+			prevDirection = currentDirection;
 
-			if (needSamplePositionCamera)
+			writePositionCameraSampleIfNeeded(time);
+			if (needToResetTrackingPoints)
 			{
-				std::vector<int> compressionParams;
-				compressionParams.push_back(cv::IMWRITE_PNG_COMPRESSION);
-				compressionParams.push_back(9);
-				auto in_time_t = std::chrono::system_clock::to_time_t(time);
-				std::stringstream fileName;
-    			fileName << "/home/pi/sample_" << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d_%H:%M:%S") << ".png";
-				cv::imwrite(fileName.str(), image, compressionParams);
-				needSamplePositionCamera = false;
+				findPositionHoldTrackingPoints();
+				needToResetTrackingPoints = false;
+			}
+			else
+			{
+				updatePositionHoldTrackingPoints();
 			}
 
-			cv::cvtColor(image, image_hsv, cv::COLOR_BGR2HSV);
-			cv::inRange(image_hsv, cv::Scalar(markh1, marks1, markv1), cv::Scalar(markh2, marks2, markv2), mask);
-			cv::meanShift(mask, track_window, term_crit);
-
-			cv::Mat emptyMask;
-			float range_[] = {0, 256};
-    		const float* range[] = {range_};
-			int channels[] = { 0 };
-			int histSize[] = { 2 };
-			cv::Mat trackWindowPxls = mask(track_window);
-			cv::Mat trackWindowPxlsHist;
-			cv::calcHist(&trackWindowPxls, 1, channels, emptyMask, trackWindowPxlsHist, 1, histSize, range);
-			int whitePxls = trackWindowPxlsHist.at<float>(1, 0);
-			if (whitePxls < 20)
-			{
-				track_window.x = TRACK_WINDOW_INIT_X;
-				track_window.y = TRACK_WINDOW_INIT_Y;
-			}
-			// find px
-			int pxShiftXLocal = (IMAGE_WIDTH / 2) - (track_window.x + track_window.width / 2);
-			int pxShiftYLocal = (IMAGE_HEIGHT / 2) - (track_window.y + track_window.height / 2);
-
-			float pixelWidth = (height * 2.4f) / IMAGE_WIDTH;
-			float shiftXLocal = float(-pxShiftYLocal) * pixelWidth;
-			float shiftYLocal = float(-pxShiftXLocal) * pixelWidth;
-
-			float shiftXGlobal = shiftXLocal * cos(glm::radians(direction)) - shiftYLocal * sin(glm::radians(direction));
-			float shiftYGlobal = shiftXLocal * sin(glm::radians(direction)) + shiftYLocal * cos(glm::radians(direction));
-
+			auto [shiftXGlobal, shiftYGlobal] = calculateShiftFromInitialPosition();
 			float deltaXGlobal = shiftXGlobal - prevShiftXGlobal;
 			float deltaYGlobal = shiftYGlobal - prevShiftYGlobal;
 			prevShiftXGlobal = shiftXGlobal;
 			prevShiftYGlobal = shiftYGlobal;
 			// dont control position on low height or when hold mode is off
-			if (height < 0.1 || holdMode == 0)
+			if (currentHeight < 0.1 || holdMode == 0)
 			{
 				shiftXGlobal = 0.f;
 				shiftYGlobal = 0.f;
@@ -564,8 +492,7 @@ void FlightController::startPositionControl()
 				posYErrDer = 0.f;
 				prevShiftXGlobal = 0.f;
 				prevShiftYGlobal = 0.f;
-				track_window.x = TRACK_WINDOW_INIT_X;
-				track_window.y = TRACK_WINDOW_INIT_Y;
+				needToResetTrackingPoints = true;
 			}
 			if (moveX != 0.f || moveY != 0.f)
 			{
@@ -579,8 +506,7 @@ void FlightController::startPositionControl()
 				posYErrInt = 0.f;
 				prevShiftXGlobal = 0.f;
 				prevShiftYGlobal = 0.f;
-				track_window.x = TRACK_WINDOW_INIT_X;
-				track_window.y = TRACK_WINDOW_INIT_Y;
+				needToResetTrackingPoints = true;
 			}
 			float posXErr = - shiftXGlobal;
 			float posYErr = - shiftYGlobal;
@@ -608,6 +534,123 @@ void FlightController::startPositionControl()
 		}
 	});
 	thread.detach();
+}
+
+
+void FlightController::initCV()
+{
+	cv::setUseOptimized(true);
+	videoCap.open(0);
+	videoCap.set(cv::CAP_PROP_FRAME_WIDTH, IMAGE_WIDTH);
+	videoCap.set(cv::CAP_PROP_FRAME_HEIGHT, IMAGE_HEIGHT);
+	// cap.set(cv::CAP_PROP_AUTO_EXPOSURE, 0.25);
+	// cap.set(cv::CAP_PROP_EXPOSURE, exposure);
+	videoCap.set(cv::CAP_PROP_FPS, 90.0);
+	if(!videoCap.isOpened())
+	{
+		std::cout << "cant open video\n";
+	}
+}
+
+void FlightController::readFrame()
+{
+	if (!videoCap.read(image))
+	{
+		std::cout << "cant read frame\n";
+	}
+	cv::cvtColor(image, imageGray, cv::COLOR_BGR2GRAY);
+}
+
+void FlightController::findPositionHoldTrackingPoints()
+{
+	cv::goodFeaturesToTrack(imageGray, currentCoordinates, 100, 0.3, 7, cv::Mat(), 7, false, 0.04);
+	oldImageGray = imageGray.clone();
+	startCoordinatesFromCenterInMeters = convertCoordinatesToMetersFromCenter(currentCoordinates);
+}
+
+void FlightController::updatePositionHoldTrackingPoints()
+{
+	std::vector<cv::Point2f> newCoordintaes;
+	std::vector<uchar> status;
+    std::vector<float> err;
+
+    cv::TermCriteria criteria = cv::TermCriteria((cv::TermCriteria::COUNT) + (cv::TermCriteria::EPS), 10, 0.03);
+	if (currentCoordinates.size() > 0)
+	{
+    	cv::calcOpticalFlowPyrLK(oldImageGray, imageGray, currentCoordinates, newCoordintaes, status, err, cv::Size(15,15), 2, criteria);
+	}
+
+    std::vector<cv::Point2f> goodNewCoordintaes;
+	std::vector<cv::Point2f> filteredStartCoordinatesFromCenterInMeters;
+    for(uint i = 0; i < newCoordintaes.size(); i++)
+    {
+        if(status[i] == 1) {
+            goodNewCoordintaes.push_back(newCoordintaes[i]);
+			filteredStartCoordinatesFromCenterInMeters.push_back(startCoordinatesFromCenterInMeters[i]);
+        }
+    }
+	if (goodNewCoordintaes.size() == 0) // if all tracking points are lost find new ones
+	{
+		needToResetTrackingPoints = true;
+	}
+
+    oldImageGray = imageGray.clone();
+    currentCoordinates = goodNewCoordintaes;
+	startCoordinatesFromCenterInMeters = filteredStartCoordinatesFromCenterInMeters;
+}
+
+std::tuple<float, float> FlightController::calculateShiftFromInitialPosition()
+{
+	std::vector<cv::Point2f> currentCoordinatesFromCenterInMeters = convertCoordinatesToMetersFromCenter(currentCoordinates);
+	int size = currentCoordinatesFromCenterInMeters.size();
+	if (size != startCoordinatesFromCenterInMeters.size() || size == 0) return { 0.f, 0.f };
+	float avgX = 0.f;
+	float avgY = 0.f;
+	for (int i = 0; i < size; i++)
+	{
+		avgX += (currentCoordinatesFromCenterInMeters[i].x - startCoordinatesFromCenterInMeters[i].x);
+		avgY += (currentCoordinatesFromCenterInMeters[i].y - startCoordinatesFromCenterInMeters[i].y);
+	}
+	avgX /= size;
+	avgY /= size;
+	return { avgX, avgY };
+}
+
+std::vector<cv::Point2f> FlightController::convertCoordinatesToMetersFromCenter(const std::vector<cv::Point2f>& pixelCoordinates)
+{
+	std::vector<cv::Point2f> points;
+	float pixelWidth = (currentHeight * 2.4f) / IMAGE_WIDTH;
+	for (auto& point : pixelCoordinates)
+	{
+		float localX = (point.y - (IMAGE_HEIGHT / 2)) * pixelWidth;
+		float localY = (point.x - (IMAGE_WIDTH / 2)) * pixelWidth;
+		float x = localX * cos(glm::radians(currentDirection)) - localY * sin(glm::radians(currentDirection));
+		float y = localX * sin(glm::radians(currentDirection)) + localY * cos(glm::radians(currentDirection));
+		points.push_back({ x, y });
+	}
+	return points;
+}
+
+void FlightController::writePositionCameraSampleIfNeeded(std::chrono::system_clock::time_point time)
+{
+	if (!needSamplePositionCamera) return;
+	std::vector<int> compressionParams;
+	compressionParams.push_back(cv::IMWRITE_PNG_COMPRESSION);
+	compressionParams.push_back(9);
+	auto in_time_t = std::chrono::system_clock::to_time_t(time);
+	std::stringstream fileName;
+	fileName << "/home/pi/sample_" << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d_%H:%M:%S") << ".png";
+	cv::imwrite(fileName.str(), image, compressionParams);
+	needSamplePositionCamera = false;
+}
+
+std::tuple<float, float> FlightController::getHeightAndDirection()
+{
+	uint8_t heightAndDirectionData[8];
+	while (!readBytes((uint8_t)FlightControllerRegisters::GET_HEIGHT_AND_DIRECTION, heightAndDirectionData, 8)) {}
+	float height = Utils::getFloatFromNet(heightAndDirectionData);
+	float direction = Utils::getFloatFromNet(heightAndDirectionData + 4);
+	return { height, direction };
 }
 
 

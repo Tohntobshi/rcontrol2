@@ -1,4 +1,5 @@
 Compiled and Tested on Raspberry Pi OS Lite
+
 following packages should be installed:
 ```
 cmake libdbus-1-dev libbluetooth-dev libopencv-dev
