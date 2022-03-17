@@ -7,6 +7,7 @@
 #include "messageTypes.h"
 #include <glm/glm.hpp>
 #include <iomanip>
+#include <algorithm>
 
 #define AUX_READY_PIN 25
 
@@ -455,7 +456,7 @@ void FlightController::startPositionControl()
 			int holdMode = positionHoldMode;
 
 			auto time = std::chrono::system_clock::now();
-			auto ms_elapsed = (time - prevTime).count() / 1000000;
+			auto msElapsed = (time - prevTime).count() / 1000000;
 			// std::cout << ms_elapsed << " ms elapsed\n";
 			float deltaHeight = currentHeight - prevHeight;
 			float deltaDirection = currentDirection - prevDirection;
@@ -472,6 +473,10 @@ void FlightController::startPositionControl()
 			else
 			{
 				updatePositionHoldTrackingPoints();
+			}
+			if (moveX != 0.f || moveY != 0.f)
+			{
+				moveInitialPosition(moveX, moveY, msElapsed);
 			}
 
 			auto [shiftXGlobal, shiftYGlobal] = calculateShiftFromInitialPosition();
@@ -494,26 +499,26 @@ void FlightController::startPositionControl()
 				prevShiftYGlobal = 0.f;
 				needToResetTrackingPoints = true;
 			}
-			if (moveX != 0.f || moveY != 0.f)
-			{
-				shiftXGlobal = - moveX;
-				shiftYGlobal = - moveY;
-				deltaXGlobal = 0.f;
-				deltaYGlobal = 0.f;
-				posXErrDer = 0.f;
-				posYErrDer = 0.f;
-				posXErrInt = 0.f;
-				posYErrInt = 0.f;
-				prevShiftXGlobal = 0.f;
-				prevShiftYGlobal = 0.f;
-				needToResetTrackingPoints = true;
-			}
+			// if (moveX != 0.f || moveY != 0.f)
+			// {
+			// 	shiftXGlobal = - moveX;
+			// 	shiftYGlobal = - moveY;
+			// 	deltaXGlobal = 0.f;
+			// 	deltaYGlobal = 0.f;
+			// 	posXErrDer = 0.f;
+			// 	posYErrDer = 0.f;
+			// 	posXErrInt = 0.f;
+			// 	posYErrInt = 0.f;
+			// 	prevShiftXGlobal = 0.f;
+			// 	prevShiftYGlobal = 0.f;
+			// 	needToResetTrackingPoints = true;
+			// }
 			float posXErr = - shiftXGlobal;
 			float posYErr = - shiftYGlobal;
-			posXErrDer = (- deltaXGlobal / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posXErrDer * derFiltering;
-			posYErrDer = (- deltaYGlobal / (ms_elapsed / 1000.f)) * (1.f - derFiltering) + posYErrDer * derFiltering;
-			posXErrInt += (posXErr * (ms_elapsed / 1000.f) * intCoef);
-			posYErrInt += (posYErr * (ms_elapsed / 1000.f) * intCoef);
+			posXErrDer = (- deltaXGlobal / (msElapsed / 1000.f)) * (1.f - derFiltering) + posXErrDer * derFiltering;
+			posYErrDer = (- deltaYGlobal / (msElapsed / 1000.f)) * (1.f - derFiltering) + posYErrDer * derFiltering;
+			posXErrInt += (posXErr * (msElapsed / 1000.f) * intCoef);
+			posYErrInt += (posYErr * (msElapsed / 1000.f) * intCoef);
 			posXErrInt = posXErrInt > intLimit ? intLimit : (posXErrInt < -intLimit ? -intLimit : posXErrInt);
 			posYErrInt = posYErrInt > intLimit ? intLimit : (posYErrInt < -intLimit ? -intLimit : posYErrInt);
 			float xAdjust = posXErr * propCoef + posXErrDer * derCoef + posXErrInt;
@@ -564,6 +569,15 @@ void FlightController::readFrame()
 void FlightController::findPositionHoldTrackingPoints()
 {
 	cv::goodFeaturesToTrack(imageGray, currentCoordinates, 100, 0.3, 7, cv::Mat(), 7, false, 0.04);
+	 // sort by distance from center
+	std::sort(currentCoordinates.begin(), currentCoordinates.end(), [&](cv::Point2f& first, cv::Point2f& second) -> bool {
+		float x1 = first.x - IMAGE_WIDTH/2;
+		float y1 = first.y - IMAGE_HEIGHT/2;
+		float x2 = second.x - IMAGE_WIDTH/2;
+		float y2 = second.y - IMAGE_HEIGHT/2;
+		return sqrt(pow(x1, 2.f) + pow(y1, 2.f)) < sqrt(pow(x2, 2.f) + pow(y2, 2.f));
+	});
+
 	oldImageGray = imageGray.clone();
 	startCoordinatesFromCenterInMeters = convertCoordinatesToMetersFromCenter(currentCoordinates);
 }
@@ -599,11 +613,22 @@ void FlightController::updatePositionHoldTrackingPoints()
 	startCoordinatesFromCenterInMeters = filteredStartCoordinatesFromCenterInMeters;
 }
 
+void FlightController::moveInitialPosition(float x, float y, int msElapsed)
+{
+	for (auto &point: startCoordinatesFromCenterInMeters)
+	{
+		point.x += (x * msElapsed / 1000.f);
+		point.y += (y * msElapsed / 1000.f);
+	}
+}
+
 std::tuple<float, float> FlightController::calculateShiftFromInitialPosition()
 {
 	std::vector<cv::Point2f> currentCoordinatesFromCenterInMeters = convertCoordinatesToMetersFromCenter(currentCoordinates);
 	int size = currentCoordinatesFromCenterInMeters.size();
 	if (size != startCoordinatesFromCenterInMeters.size() || size == 0) return { 0.f, 0.f };
+	int maxAmountOfPointsUsedForEstimation = 1;
+	size = maxAmountOfPointsUsedForEstimation > size ? size : maxAmountOfPointsUsedForEstimation;
 	float avgX = 0.f;
 	float avgY = 0.f;
 	for (int i = 0; i < size; i++)
@@ -614,6 +639,9 @@ std::tuple<float, float> FlightController::calculateShiftFromInitialPosition()
 	avgX /= size;
 	avgY /= size;
 	return { avgX, avgY };
+	// float x = currentCoordinatesFromCenterInMeters[0].x - startCoordinatesFromCenterInMeters[0].x;
+	// float y = currentCoordinatesFromCenterInMeters[0].y - startCoordinatesFromCenterInMeters[0].y;
+	// return { x, y };
 }
 
 std::vector<cv::Point2f> FlightController::convertCoordinatesToMetersFromCenter(const std::vector<cv::Point2f>& pixelCoordinates)

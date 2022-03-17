@@ -64,6 +64,7 @@ private:
 	void writePositionCameraSampleIfNeeded(std::chrono::system_clock::time_point time);
 	void findPositionHoldTrackingPoints();
 	void updatePositionHoldTrackingPoints();
+	void moveInitialPosition(float x, float y, int msElapsed);
 	std::tuple<float, float> calculateShiftFromInitialPosition();
 	std::vector<cv::Point2f> convertCoordinatesToMetersFromCenter(const std::vector<cv::Point2f>& pixelCoordinates);
 
