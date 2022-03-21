@@ -26,6 +26,9 @@ private:
 	bool writeSecondaryInfo = false;
 	bool shouldStopWritingSecondaryInfo = false;
 
+	bool videoTransmissionActive = false;
+	bool shouldStopVideoTransmission = false;
+
 	bool calibratingAcc = false;
 	bool calibratingGyro = false;
 	bool calibratingMag = false;
@@ -52,6 +55,11 @@ private:
 	float positionYErrorOut = 0.f;
 	float positionYErrorDerOut = 0.f;
 	float positionYErrorIntOut = 0.f;
+
+
+	cv::Mat imageToSend;
+	std::mutex imageToSendMutex;
+	void prepareImageToSend();
 
 	cv::VideoCapture videoCap;
 	cv::Mat image;
@@ -190,4 +198,7 @@ public:
 	void schedulePositionCameraShot();
 	void startDataRecording();
 	void stopDataRecording();
+
+	void startVideoTransmission();
+	void stopVideoTransmission();
 };

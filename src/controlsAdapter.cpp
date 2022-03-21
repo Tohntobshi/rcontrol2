@@ -592,6 +592,22 @@ void ControlsAdapter::start() {
 			delete[] msg.data;
 			continue;
 		}
+		if (msg.data[1] == (uint8_t)Controls::START_VIDEO_TRANSMISSION && msg.size == 2) {
+			flightController->startVideoTransmission();
+			#ifdef PRINT_COMMANDS
+			printf("start video transmission\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
+		if (msg.data[1] == (uint8_t)Controls::STOP_VIDEO_TRANSMISSION && msg.size == 2) {
+			flightController->stopVideoTransmission();
+			#ifdef PRINT_COMMANDS
+			printf("stop video transmission\n");
+			#endif
+			delete[] msg.data;
+			continue;
+		}
 		#ifdef PRINT_COMMANDS
 		printf("got message\n");
 		#endif

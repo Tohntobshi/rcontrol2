@@ -46,4 +46,5 @@ public:
         uint8_t positionValidity,
         int32_t satelitesAmount
     );
+    void sendVideoFrame(const uint8_t * data, int size);
 };

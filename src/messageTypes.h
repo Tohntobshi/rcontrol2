@@ -5,7 +5,8 @@ enum class MessageTypes : uint8_t
 {
 	CONTROLS,
 	PRIMARY_INFO,
-    SECONDARY_INFO
+    SECONDARY_INFO,
+    VIDEO_FRAME
 };
 
 enum class Controls : uint8_t
@@ -90,7 +91,10 @@ enum class Controls : uint8_t
     SET_HOLD_MODE,
     TAKE_POSITION_CAMERA_SHOT,
     START_DATA_RECORDING,
-    STOP_DATA_RECORDING
+    STOP_DATA_RECORDING,
+
+    START_VIDEO_TRANSMISSION,
+    STOP_VIDEO_TRANSMISSION
 };
 
 enum class FlightControllerRegisters : uint8_t

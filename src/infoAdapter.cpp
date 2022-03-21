@@ -94,3 +94,11 @@ void InfoAdapter::sendPrimaryInfo(
 
     connection->enqueueToSend({ .data = data, .size = size, .ignoreWithoutConnection = true });
 }
+
+void InfoAdapter::sendVideoFrame(const uint8_t * data, int size)
+{
+    uint8_t * dataToSend = new uint8_t[size + 1];
+    dataToSend[0] = (uint8_t)MessageTypes::VIDEO_FRAME;
+    memcpy(dataToSend + 1, data, size);
+    connection->enqueueToSend({ .data = dataToSend, .size = uint32_t(size + 1), .ignoreWithoutConnection = true });
+}

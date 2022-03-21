@@ -8,6 +8,7 @@
 #include <glm/glm.hpp>
 #include <iomanip>
 #include <algorithm>
+#include "videoEncoder.h"
 
 #define AUX_READY_PIN 25
 
@@ -457,7 +458,7 @@ void FlightController::startPositionControl()
 
 			auto time = std::chrono::system_clock::now();
 			auto msElapsed = (time - prevTime).count() / 1000000;
-			// std::cout << ms_elapsed << " ms elapsed\n";
+			// std::cout << msElapsed << " ms elapsed\n";
 			float deltaHeight = currentHeight - prevHeight;
 			float deltaDirection = currentDirection - prevDirection;
 			prevTime = time;
@@ -478,6 +479,7 @@ void FlightController::startPositionControl()
 			{
 				moveInitialPosition(moveX, moveY, msElapsed);
 			}
+			prepareImageToSend();
 
 			auto [shiftXGlobal, shiftYGlobal] = calculateShiftFromInitialPosition();
 			float deltaXGlobal = shiftXGlobal - prevShiftXGlobal;
@@ -657,6 +659,14 @@ std::vector<cv::Point2f> FlightController::convertCoordinatesToMetersFromCenter(
 		points.push_back({ x, y });
 	}
 	return points;
+}
+
+void FlightController::prepareImageToSend()
+{
+	if (!videoTransmissionActive) return;
+	std::unique_lock<std::mutex> lck(imageToSendMutex);
+	imageToSend = image.clone();
+	// TODO draw tracking points on this image
 }
 
 void FlightController::writePositionCameraSampleIfNeeded(std::chrono::system_clock::time_point time)
@@ -1062,4 +1072,50 @@ void FlightController::setHoldMode(int value)
 void FlightController::schedulePositionCameraShot()
 {
 	needSamplePositionCamera = true;
+}
+
+void FlightController::startVideoTransmission()
+{
+	if (videoTransmissionActive) return;
+	// std::cout << "received signal to start video\n";
+	videoTransmissionActive = true;
+	shouldStopVideoTransmission = false;
+	std::thread thread([&]() -> void {
+		VideoEncoder encoder(IMAGE_WIDTH, IMAGE_HEIGHT, 75000, 15);
+		auto prevTime = std::chrono::system_clock::now();
+		while (!shouldStopVideoTransmission && infoAdapter)
+		{
+			std::unique_lock<std::mutex> lck(imageToSendMutex);
+			int rawSize = imageToSend.elemSize() * imageToSend.total();
+			uint8_t * rawData = new uint8_t[rawSize];
+			memcpy(rawData, imageToSend.data, rawSize);
+			lck.unlock();
+			auto [encodedData, encodedSize] = encoder.encode(rawData, rawSize);
+			if (encodedSize != 0)
+			{
+				infoAdapter->sendVideoFrame(encodedData, encodedSize);
+				delete[] encodedData;
+
+				// uint8_t * mockData = new uint8_t[1000];
+				// infoAdapter->sendVideoFrame(mockData, 1000);
+				// delete[] mockData;
+				
+			}
+			delete[] rawData;
+			// std::cout << "video packet of size " << encodedSize << " was sent\n";
+			auto time = std::chrono::system_clock::now();
+			auto msElapsed = (time - prevTime).count() / 1000000;
+			prevTime = time;
+			if (msElapsed < 66) std::this_thread::sleep_for(std::chrono::milliseconds(66 - msElapsed));
+		}
+		videoTransmissionActive = false;
+		// std::cout << "vid transm stopped\n";
+	});
+	thread.detach();
+}
+
+void FlightController::stopVideoTransmission()
+{
+	// std::cout << "received signal to stop video\n";
+	shouldStopVideoTransmission = true;
 }
