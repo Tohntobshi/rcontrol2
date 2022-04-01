@@ -12,7 +12,7 @@
 
 #define AUX_READY_PIN 25
 
-#define IMAGE_WIDTH 319
+#define IMAGE_WIDTH 320
 #define IMAGE_HEIGHT 240
 
 FlightController * FlightController::instance = nullptr;
@@ -666,7 +666,11 @@ void FlightController::prepareImageToSend()
 	if (!videoTransmissionActive) return;
 	std::unique_lock<std::mutex> lck(imageToSendMutex);
 	imageToSend = image.clone();
-	// TODO draw tracking points on this image
+	int i = 0;
+	for (auto& point: currentCoordinates) {
+		cv::circle(imageToSend, point, 5, i == 0 ? cv::Scalar(0,255,0) : cv::Scalar(0,0,255), -1);
+		i++;
+	}
 }
 
 void FlightController::writePositionCameraSampleIfNeeded(std::chrono::system_clock::time_point time)
@@ -1081,7 +1085,7 @@ void FlightController::startVideoTransmission()
 	videoTransmissionActive = true;
 	shouldStopVideoTransmission = false;
 	std::thread thread([&]() -> void {
-		VideoEncoder encoder(IMAGE_WIDTH, IMAGE_HEIGHT, 75000, 15);
+		VideoEncoder encoder(IMAGE_WIDTH, IMAGE_HEIGHT, 250000, 15);
 		auto prevTime = std::chrono::system_clock::now();
 		while (!shouldStopVideoTransmission && infoAdapter)
 		{
